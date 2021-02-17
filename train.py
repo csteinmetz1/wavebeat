@@ -71,11 +71,13 @@ dict_args["nparams"] = 2
 
 if args.model_type == 'tcn':
     model = TCNModel(**dict_args)
+    rf = model.compute_receptive_field()
+    print(f"Model has receptive field of {(rf/args.sample_rate)*1e3:0.1f} ms ({rf}) samples")
 elif args.model_type == 'lstm':
     model = LSTMModel(**dict_args)
 
 # summary 
-torchsummary.summary(model, [(1,65536)], device="cpu")
+torchsummary.summary(model, [(1,args.train_length)], device="cpu")
 
 # train!
 trainer.fit(model, train_dataloader, train_dataloader)

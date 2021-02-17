@@ -181,6 +181,8 @@ class TCNModel(Base):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--lr', type=float, default=1e-2)
+
         # --- model related ---
         parser.add_argument('--ninputs', type=int, default=1)
         parser.add_argument('--noutputs', type=int, default=1)

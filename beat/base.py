@@ -7,6 +7,8 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from beat.utils import center_crop, causal_crop
+from beat.plot import plot_activations
+from beat.loss import GlobalMSELoss
 
 class Base(pl.LightningModule):
     """ Base module with train and validation loops.
@@ -28,7 +30,10 @@ class Base(pl.LightningModule):
 
         # these lines need to be commented out when trying
         # to jit these models in `export.py`
-        self.l1      = torch.nn.L1Loss()
+        self.l1 = torch.nn.L1Loss()
+        self.l2 = torch.nn.MSELoss()
+        self.bce = torch.nn.BCELoss()
+        self.gmse = GlobalMSELoss()
 
     def forward(self, x, p):
         pass
@@ -47,7 +52,7 @@ class Base(pl.LightningModule):
             target = center_crop(target, pred.shape[-1])
 
         # compute the error using appropriate loss      
-        loss = self.l1(pred, target)
+        loss, _, _ = self.gmse(pred, target)
 
         self.log('train_loss', 
                  loss, 
@@ -74,12 +79,16 @@ class Base(pl.LightningModule):
             target_crop = center_crop(target, pred.shape[-1])
 
         # compute the validation error using all losses
-        l1_loss      = self.l1(pred, target_crop)
+        gmse_loss, pos, neg = self.gmse(pred, target_crop)
+        l1_loss = self.l1(pred, target_crop)
+        l2_loss = self.l2(pred, target_crop)
 
-        aggregate_loss = l1_loss
-
-        self.log('val_loss', aggregate_loss)
+        self.log('val_loss', gmse_loss)
         self.log('val_loss/L1', l1_loss)
+        self.log('val_loss/L2', l2_loss)
+        self.log('val_loss/Beat', pos)
+        self.log('val_loss/No Beat', neg)
+
 
         # move tensors to cpu for logging
         outputs = {
@@ -120,9 +129,13 @@ class Base(pl.LightningModule):
             self.logger.experiment.add_audio(f"target/{idx}", 
                                              t, self.global_step, 
                                              sample_rate=self.hparams.sample_rate)
-            self.logger.experiment.add_audio(f"pred/{idx}",   
-                                             p, self.global_step, 
+            self.logger.experiment.add_audio(f"pred+target/{idx}",   
+                                             (p+t)/2, self.global_step, 
                                              sample_rate=self.hparams.sample_rate)
+
+            self.logger.experiment.add_image(f"act/{idx}",
+                                             plot_activations(p, t),
+                                             self.global_step)
 
             if self.hparams.save_dir is not None:
                 if not os.path.isdir(self.hparams.save_dir):
@@ -169,7 +182,7 @@ class Base(pl.LightningModule):
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         # --- training related ---
-        parser.add_argument('--lr', type=float, default=1e-3)
+        parser.add_argument('--lr', type=float, default=1e-2)
         # --- vadliation related ---
         parser.add_argument('--save_dir', type=str, default=None)
         parser.add_argument('--num_examples', type=int, default=4)
