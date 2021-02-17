@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import torch 
+import julius
 import torchaudio
 import numpy as np
 
@@ -23,7 +24,8 @@ class BallroomDataset(torch.utils.data.Dataset):
                  length=16384, 
                  preload=False, 
                  half=True, 
-                 fraction=1.0):
+                 fraction=1.0,
+                 augment=True):
         """
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
@@ -34,6 +36,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             preload (bool, optional): Read in all data into RAM during init. (Default: False)
             half (bool, optional): Store the float32 audio as float16. (Default: True)
             fraction (float, optional): Fraction of the data to load from the subset. (Default: 1.0)
+            augment (bool, optional): Apply random data augmentations to input audio. (Default: False)
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
@@ -42,6 +45,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.preload = preload
         self.half = half
         self.fraction = fraction
+        self.augment = augment
 
         #if self.subset == "full":
 
@@ -66,6 +70,18 @@ class BallroomDataset(torch.utils.data.Dataset):
         # first load the audio file
         audio, sr = torchaudio.load(self.audio_files[idx])
 
+        # resample if needed
+        if sr != self.sample_rate:
+            audio = julius.resample_frac(audio, sr, self.sample_rate)
+
+        if self.augment:
+            if np.random.rand() > 0.6:      # random gain from 0dB to -12 dB
+                audio = audio * (10**(-(np.random.rand() * 12)/20))   
+            if np.random.rand() > 0.5:      # phase inversion
+                audio = -audio                              
+            if np.random.rand() > 0.1:      # apply compression
+                audio = torch.tanh(audio)                   
+                
         # now get the annotation information
         beat_samples, beat_indices = self.load_annot(self.annot_files[idx])
 

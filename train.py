@@ -53,6 +53,7 @@ trainer = pl.Trainer.from_argparse_args(args)
 # setup the dataloaders
 train_dataset = BallroomDataset(args.audio_dir,
                                 args.annot_dir,
+                                sample_rate=args.sample_rate,
                                 subset=args.train_subset,
                                 fraction=args.train_fraction,
                                 half=True if args.precision == 16 else False,
