@@ -66,6 +66,20 @@ train_dataloader = torch.utils.data.DataLoader(train_dataset,
                                             num_workers=args.num_workers,
                                             pin_memory=True)
 
+val_dataset = BallroomDataset(args.audio_dir,
+                                args.annot_dir,
+                                sample_rate=args.sample_rate,
+                                subset=args.eval_subset,
+                                half=True if args.precision == 16 else False,
+                                preload=args.preload,
+                                length=args.eval_length)
+
+cal_dataloader = torch.utils.data.DataLoader(val_dataset, 
+                                            shuffle=args.shuffle,
+                                            batch_size=1,
+                                            num_workers=args.num_workers,
+                                            pin_memory=True)
+
 # create the model with args
 dict_args = vars(args)
 dict_args["nparams"] = 2
