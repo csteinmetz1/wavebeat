@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.signal
 
-def find_beats(t, p, smoothing=15, threshold=0.8, distance=None, sample_rate=44100):
+def find_beats(t, p, smoothing=15, threshold=0.5, distance=None, sample_rate=44100, beat_type="beat"):
 
     # t is ground truth beats
     # p is predicted beats 
@@ -14,8 +14,15 @@ def find_beats(t, p, smoothing=15, threshold=0.8, distance=None, sample_rate=441
 
     # by default, we assume that the min distance between beats is fs/4
     # this allows for at max, 4 BPS, which corresponds to 240 BPM 
-    if distance is None:
-        distance = sample_rate / 4
+    # for downbeats, we assume max of 1 downBPS
+    if beat_type == "beat":
+        if distance is None:
+            distance = sample_rate / 4
+    elif beat_type == "downbeat":
+        if distance is None:
+            distance = sample_rate
+    else:
+        raise RuntimeError(f"Invalid beat_type: `{beat_type}`.")
 
     # perform peak picking given the supplied parameters
     est_beats, heights = scipy.signal.find_peaks(p, height=threshold, distance=distance)

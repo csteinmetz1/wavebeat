@@ -28,6 +28,8 @@ parser.add_argument('--train_fraction', type=float, default=1.0)
 parser.add_argument('--eval_length', type=int, default=131072)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--num_workers', type=int, default=0)
+parser.add_argument('--augment', action='store_true')
+parser.add_argument('--dry_run', action='store_true')
 
 # add all the available trainer options to argparse
 parser = pl.Trainer.add_argparse_args(parser)
@@ -56,9 +58,11 @@ train_dataset = BallroomDataset(args.audio_dir,
                                 sample_rate=args.sample_rate,
                                 subset=args.train_subset,
                                 fraction=args.train_fraction,
+                                augment=args.augment,
                                 half=True if args.precision == 16 else False,
                                 preload=args.preload,
-                                length=args.train_length)
+                                length=args.train_length,
+                                dry_run=args.dry_run)
 
 train_dataloader = torch.utils.data.DataLoader(train_dataset, 
                                             shuffle=args.shuffle,
@@ -69,14 +73,16 @@ train_dataloader = torch.utils.data.DataLoader(train_dataset,
 val_dataset = BallroomDataset(args.audio_dir,
                                 args.annot_dir,
                                 sample_rate=args.sample_rate,
-                                subset=args.eval_subset,
+                                subset=args.val_subset if not args.dry_run else args.train_subset,
+                                augment=False,
                                 half=True if args.precision == 16 else False,
                                 preload=args.preload,
-                                length=args.eval_length)
+                                length=args.eval_length,
+                                dry_run=args.dry_run)
 
-cal_dataloader = torch.utils.data.DataLoader(val_dataset, 
+val_dataloader = torch.utils.data.DataLoader(val_dataset, 
                                             shuffle=args.shuffle,
-                                            batch_size=1,
+                                            batch_size=8,
                                             num_workers=args.num_workers,
                                             pin_memory=True)
 
@@ -95,4 +101,4 @@ elif args.model_type == 'lstm':
 torchsummary.summary(model, [(1,args.train_length)], device="cpu")
 
 # train!
-trainer.fit(model, train_dataloader, train_dataloader)
+trainer.fit(model, train_dataloader, val_dataloader)

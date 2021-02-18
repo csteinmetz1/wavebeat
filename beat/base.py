@@ -11,6 +11,7 @@ from beat.utils import center_crop, causal_crop
 from beat.plot import plot_activations
 from beat.loss import GlobalMSELoss
 from beat.peak import find_beats
+from beat.filter import FIRFilter
 
 class Base(pl.LightningModule):
     """ Base module with train and validation loops.
@@ -47,6 +48,14 @@ class Base(pl.LightningModule):
         # pass the input thrgouh the mode
         pred = self(input)
 
+        # apply lowpass filters
+        pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
+        pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
+
+        # combine back
+        pred = torch.cat((pred_beats, pred_downbeats), dim=1)
+        #target = torch.cat((target_beats, target_downbeats), dim=1)
+
         # crop the input and target signals
         if self.hparams.causal:
             target = causal_crop(target, pred.shape[-1])
@@ -72,6 +81,14 @@ class Base(pl.LightningModule):
         # pass the input thrgouh the mode
         pred = self(input)
 
+        # apply lowpass filters
+        pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
+        pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
+
+        # combine back (we don't filter the target)
+        pred = torch.cat((pred_beats, pred_downbeats), dim=1)
+        #target = torch.cat((target_beats, target_downbeats), dim=1)
+
         # crop the input and target signals
         if self.hparams.causal:
             input_crop = causal_crop(input, pred.shape[-1])
@@ -81,9 +98,9 @@ class Base(pl.LightningModule):
             target_crop = center_crop(target, pred.shape[-1])
 
         # compute the validation error using all losses
-        bce_loss = self.bce(pred, target_crop)
-        l1_loss = self.l1(pred, target_crop)
-        l2_loss = self.l2(pred, target_crop)
+        #bce_loss = self.bce(pred, target_crop)
+        #l1_loss = self.l1(pred, target_crop)
+        #l2_loss = self.l2(pred, target_crop)
         gmse_loss, _, _ = self.gmse(pred, target_crop)
 
         self.log('val_loss', gmse_loss)
@@ -120,44 +137,81 @@ class Base(pl.LightningModule):
                                         size=np.min([len(outputs["input"]), self.hparams.num_examples]))
 
         # compute metrics 
-        f1_scores = []
+        beat_f1_scores = []
+        downbeat_f1_scores = []
         for idx in np.arange(len(outputs["input"])):
             t = outputs["target"][idx].squeeze()
             p = outputs["pred"][idx].squeeze()
-            ref_beats, est_beats, _ = find_beats(t, 
-                                                 p, 
-                                                 sample_rate=self.hparams.sample_rate)
-            scores = mir_eval.beat.evaluate(ref_beats, est_beats)
-            f1_scores.append(scores["F-measure"])
 
-        self.log('val_loss/F-measure', np.mean(f1_scores))
+            # separate the beats and downbeat activations
+            t_beats = t[0,:]
+            t_downbeats = t[1,:]
+            p_beats = p[0,:]
+            p_downbeats = p[1,:]
+
+            ref_beats, est_beats, _ = find_beats(t_beats, 
+                                                 p_beats, 
+                                                 beat_type="beat",
+                                                 sample_rate=self.hparams.sample_rate)
+            ref_downbeats, est_downbeats, _ = find_beats(t_downbeats, 
+                                                         p_downbeats, 
+                                                         beat_type="downbeat",
+                                                         sample_rate=self.hparams.sample_rate)
+            # evaluate beats - trim beats before 5 seconds.
+            ref_beats = mir_eval.beat.trim_beats(ref_beats)
+            est_beats = mir_eval.beat.trim_beats(est_beats)
+            scores = mir_eval.beat.evaluate(ref_beats, est_beats)
+            beat_f1_scores.append(scores["F-measure"])
+
+            # evaluate downbeats - trim beats before 5 seconds.
+            ref_downbeats = mir_eval.beat.trim_beats(ref_downbeats)
+            est_downbeats = mir_eval.beat.trim_beats(est_downbeats)
+            scores = mir_eval.beat.evaluate(ref_downbeats, est_downbeats)
+            downbeat_f1_scores.append(scores["F-measure"])
+
+        self.log('val_loss/Beat F-measure', np.mean(beat_f1_scores))
+        self.log('val_loss/Downbeat F-measure', np.mean(downbeat_f1_scores))
 
         for idx, rand_idx in enumerate(list(rand_indices)):
             i = outputs["input"][rand_idx].squeeze()
             t = outputs["target"][rand_idx].squeeze()
             p = outputs["pred"][rand_idx].squeeze()
 
-            ref_beats, est_beats, est_sm = find_beats(t, 
-                                                      p, 
+            t_beats = t[0,:]
+            t_downbeats = t[1,:]
+            p_beats = p[0,:]
+            p_downbeats = p[1,:]
+
+            ref_beats, est_beats, est_sm = find_beats(t_beats, 
+                                                      p_beats, 
+                                                      beat_type="beat",
                                                       sample_rate=self.hparams.sample_rate)
 
+            ref_downbeats, est_downbeats, est_downbeat_sm = find_beats(t_downbeats, 
+                                                                       p_downbeats, 
+                                                                       beat_type="downbeat",
+                                                                       sample_rate=self.hparams.sample_rate)
             # log audio examples
             self.logger.experiment.add_audio(f"input/{idx}",  
                                              i, self.global_step, 
                                              sample_rate=self.hparams.sample_rate)
-            self.logger.experiment.add_audio(f"target/{idx}", 
-                                             t, self.global_step, 
-                                             sample_rate=self.hparams.sample_rate)
-            self.logger.experiment.add_audio(f"pred+target/{idx}",   
-                                             (p+t)/2, self.global_step, 
-                                             sample_rate=self.hparams.sample_rate)
+            #self.logger.experiment.add_audio(f"target/{idx}", 
+            #                                 t, self.global_step, 
+            #                                 sample_rate=self.hparams.sample_rate)
+            #self.logger.experiment.add_audio(f"pred+target/{idx}",   
+            #                                 (p+t)/2, self.global_step, 
+            #                                 sample_rate=self.hparams.sample_rate)
 
             # log beats plots
             self.logger.experiment.add_image(f"act/{idx}",
                                              plot_activations(ref_beats, 
                                                               est_beats, 
                                                               est_sm,
-                                                              self.hparams.sample_rate),
+                                                              self.hparams.sample_rate,
+                                                              ref_downbeats=ref_downbeats,
+                                                              est_downbeats=est_downbeats,
+                                                              est_downbeats_sm=est_downbeat_sm,
+                                                              ),
                                              self.global_step)
 
             if self.hparams.save_dir is not None:

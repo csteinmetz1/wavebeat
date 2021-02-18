@@ -25,7 +25,8 @@ class BallroomDataset(torch.utils.data.Dataset):
                  preload=False, 
                  half=True, 
                  fraction=1.0,
-                 augment=True):
+                 augment=False,
+                 dry_run=False):
         """
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
@@ -37,21 +38,42 @@ class BallroomDataset(torch.utils.data.Dataset):
             half (bool, optional): Store the float32 audio as float16. (Default: True)
             fraction (float, optional): Fraction of the data to load from the subset. (Default: 1.0)
             augment (bool, optional): Apply random data augmentations to input audio. (Default: False)
+            dry_run (bool, optional): Train on a single example.
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
         self.sample_rate = sample_rate
+        self.subset = subset
         self.length = length
         self.preload = preload
         self.half = half
         self.fraction = fraction
         self.augment = augment
+        self.dry_run = dry_run
 
-        #if self.subset == "full":
-
-        # for now we just load of all the data as training data
+        # first get all of the audio files
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", "*.wav"))
         self.audio_files.sort() # sort the list of audio files
+
+        if self.subset == "train":
+            start = 0
+            stop = int(len(self.audio_files) * 0.8)
+        elif self.subset == "val":
+            start = int(len(self.audio_files) * 0.8)
+            stop = int(len(self.audio_files) * 0.9)
+        elif self.subset == "test":
+            start = int(len(self.audio_files) * 0.9)
+            stop = -1
+        elif self.subset == "full":
+            start = 0
+            stop = -1
+        
+        # now pick out subset of audio files
+        self.audio_files = self.audio_files[start:stop]
+        print(f"Selected {len(self.audio_files)} files for {self.subset} set.")
+
+        # select one file for the dry run
+        if self.dry_run: self.audio_files = [self.audio_files[0]] * 50
 
         self.annot_files = []
         for audio_file in self.audio_files:
@@ -72,29 +94,36 @@ class BallroomDataset(torch.utils.data.Dataset):
 
         # resample if needed
         if sr != self.sample_rate:
-            audio = julius.resample_frac(audio, sr, self.sample_rate)
-
-        if self.augment:
-            if np.random.rand() > 0.6:      # random gain from 0dB to -12 dB
-                audio = audio * (10**(-(np.random.rand() * 12)/20))   
-            if np.random.rand() > 0.5:      # phase inversion
-                audio = -audio                              
-            if np.random.rand() > 0.2:      # apply compression
-                audio = torch.tanh(audio)      
-            if np.random.rand() > 0.05:     # drop frames
-                zero_size = int(self.length*0.1)
-                start = np.random.randint(audio.shape[-1] - zero_size - 1)
-                stop = start + zero_size
-                audio[:,start:stop] = 0             
+            audio = julius.resample_frac(audio, sr, self.sample_rate)   
 
         # now get the annotation information
-        beat_samples, beat_indices = self.load_annot(self.annot_files[idx])
+        beat_samples, downbeat_samples, beat_indices = self.load_annot(self.annot_files[idx])
 
         # now we construct the target sequence with beat (1) and no beat (0)
         N = audio.shape[-1]
-        target = torch.zeros(1,N)
+        target = torch.zeros(2,N)
+        target[0,beat_samples] = 1  # first channel is beats
+        target[1,downbeat_samples] = 1  # second channel is downbeats
 
-        target[:,beat_samples] = 1
+        # apply augmentations
+        if self.augment:
+            if np.random.rand() < 0.2:      # random gain from 0dB to -12 dB
+                audio = audio * (10**(-(np.random.rand() * 12)/20))   
+            if np.random.rand() < 0.5:      # phase inversion
+                audio = -audio                              
+            if np.random.rand() < 0.2:      # apply compression
+                audio = torch.tanh(audio)      
+            if np.random.rand() < 0.05:     # drop frames
+                zero_size = int(self.length*0.1)
+                start = np.random.randint(audio.shape[-1] - zero_size - 1)
+                stop = start + zero_size
+                audio[:,start:stop] = 0
+                target[:,start:stop] = 0
+            if np.random.rand() < 0.5:      # shift targets forward/back max 10ms
+                max_shift = int(0.10 * self.sample_rate)
+                shift = np.random.randint(0, high=max_shift)
+                direction = np.random.choice([-1,1])
+                target = torch.roll(target, shift * direction)          
 
         # now we take a random crop of both
         if (N - self.length - 1) < 0:
@@ -107,7 +136,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         audio = audio[:,start:stop]
         target = target[:,start:stop]
 
-        # check the length 
+        # check the length and pad if
         if audio.shape[-1] < self.length:
             pad_size = self.length - audio.shape[-1]
             audio = torch.nn.functional.pad(audio, (pad_size,0))
@@ -121,6 +150,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             lines = fp.readlines()
         
         beat_samples = [] # array of samples containing beats
+        downbeat_samples = [] # array of samples containing downbeats (1)
         beat_indices = [] # array of beat type one-hot encoded  
 
         for line in lines:
@@ -140,9 +170,13 @@ class BallroomDataset(torch.utils.data.Dataset):
                 beat_one_hot = [0,0,0,1]
 
             # convert seconds to samples
-            time_samples = int(float(time_sec) * (self.sample_rate))
+            beat_time_samples = int(float(time_sec) * (self.sample_rate))
 
-            beat_samples.append(time_samples)
+            beat_samples.append(beat_time_samples)
             beat_indices.append(beat_one_hot)
 
-        return beat_samples, beat_indices
+            if beat == 1:
+                downbeat_time_samples = int(float(time_sec) * (self.sample_rate))
+                downbeat_samples.append(downbeat_time_samples)
+
+        return beat_samples, downbeat_samples, beat_indices

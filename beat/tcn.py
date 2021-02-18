@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from beat.base import Base
+from beat.filter import FIRFilter
 from beat.utils import center_crop, causal_crop
 
 class FiLM(torch.nn.Module):
@@ -115,7 +116,7 @@ class TCNModel(Base):
         """
     def __init__(self, 
                  ninputs=1,
-                 noutputs=1,
+                 noutputs=2,
                  nblocks=10, 
                  kernel_size=3, 
                  dilation_growth=1, 
@@ -151,21 +152,24 @@ class TCNModel(Base):
                                         conditional=False))
 
         self.output = torch.nn.Conv1d(out_ch, noutputs, kernel_size=1)
+        self.beat_filter = FIRFilter(fc=10, fs=self.hparams.sample_rate)
+        self.downbeat_filter = FIRFilter(fc=4, fs=self.hparams.sample_rate)
 
     def forward(self, x):
 
         # iterate over blocks passing conditioning
         for idx, block in enumerate(self.blocks):
             x = block(x)
-            #if self.hparams.skip_connections:
-            #    if idx == 0:
-            #        skips = x
-            #    else:
-            #        skips = center_crop(skips, x[-1]) + x
-            #else:
-            skips = 0
+            if self.hparams.skip_connections:
+                if idx == 0:
+                    skips = x
+                else:
+                    skips = center_crop(skips, x.shape[-1]) + x
+            else:
+                skips = 0
 
         out = torch.sigmoid(self.output(x + skips))
+        #out = self.output(x + skips)
 
         return out
 
@@ -185,7 +189,7 @@ class TCNModel(Base):
 
         # --- model related ---
         parser.add_argument('--ninputs', type=int, default=1)
-        parser.add_argument('--noutputs', type=int, default=1)
+        parser.add_argument('--noutputs', type=int, default=2)
         parser.add_argument('--nblocks', type=int, default=4)
         parser.add_argument('--kernel_size', type=int, default=5)
         parser.add_argument('--dilation_growth', type=int, default=10)
