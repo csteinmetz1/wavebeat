@@ -79,9 +79,14 @@ class BallroomDataset(torch.utils.data.Dataset):
                 audio = audio * (10**(-(np.random.rand() * 12)/20))   
             if np.random.rand() > 0.5:      # phase inversion
                 audio = -audio                              
-            if np.random.rand() > 0.1:      # apply compression
-                audio = torch.tanh(audio)                   
-                
+            if np.random.rand() > 0.2:      # apply compression
+                audio = torch.tanh(audio)      
+            if np.random.rand() > 0.05:     # drop frames
+                zero_size = int(self.length*0.1)
+                start = np.random.randint(audio.shape[-1] - zero_size - 1)
+                stop = start + zero_size
+                audio[:,start:stop] = 0             
+
         # now get the annotation information
         beat_samples, beat_indices = self.load_annot(self.annot_files[idx])
 
@@ -92,10 +97,21 @@ class BallroomDataset(torch.utils.data.Dataset):
         target[:,beat_samples] = 1
 
         # now we take a random crop of both
-        start = np.random.randint(N - self.length - 1)
-        stop = start + self.length
+        if (N - self.length - 1) < 0:
+            start = 0
+            stop = self.length
+        else:
+            start = np.random.randint(N - self.length - 1)
+            stop = start + self.length
+
         audio = audio[:,start:stop]
         target = target[:,start:stop]
+
+        # check the length 
+        if audio.shape[-1] < self.length:
+            pad_size = self.length - audio.shape[-1]
+            audio = torch.nn.functional.pad(audio, (pad_size,0))
+            target = torch.nn.functional.pad(target, (pad_size,0))
 
         return audio, target
 

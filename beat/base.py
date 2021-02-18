@@ -1,5 +1,6 @@
 import os
 import torch
+import mir_eval
 import torchaudio
 import numpy as np
 import torchsummary
@@ -9,6 +10,7 @@ from argparse import ArgumentParser
 from beat.utils import center_crop, causal_crop
 from beat.plot import plot_activations
 from beat.loss import GlobalMSELoss
+from beat.peak import find_beats
 
 class Base(pl.LightningModule):
     """ Base module with train and validation loops.
@@ -79,16 +81,16 @@ class Base(pl.LightningModule):
             target_crop = center_crop(target, pred.shape[-1])
 
         # compute the validation error using all losses
-        gmse_loss, pos, neg = self.gmse(pred, target_crop)
+        bce_loss = self.bce(pred, target_crop)
         l1_loss = self.l1(pred, target_crop)
         l2_loss = self.l2(pred, target_crop)
+        gmse_loss, _, _ = self.gmse(pred, target_crop)
 
         self.log('val_loss', gmse_loss)
-        self.log('val_loss/L1', l1_loss)
-        self.log('val_loss/L2', l2_loss)
-        self.log('val_loss/Beat', pos)
-        self.log('val_loss/No Beat', neg)
-
+        #self.log('val_loss/L1', l1_loss)
+        #self.log('val_loss/L2', l2_loss)
+        #self.log('val_loss/Beat', pos)
+        #self.log('val_loss/No Beat', neg)
 
         # move tensors to cpu for logging
         outputs = {
@@ -117,10 +119,27 @@ class Base(pl.LightningModule):
                                         replace=False,
                                         size=np.min([len(outputs["input"]), self.hparams.num_examples]))
 
+        # compute metrics 
+        f1_scores = []
+        for idx in np.arange(len(outputs["input"])):
+            t = outputs["target"][idx].squeeze()
+            p = outputs["pred"][idx].squeeze()
+            ref_beats, est_beats, _ = find_beats(t, 
+                                                 p, 
+                                                 sample_rate=self.hparams.sample_rate)
+            scores = mir_eval.beat.evaluate(ref_beats, est_beats)
+            f1_scores.append(scores["F-measure"])
+
+        self.log('val_loss/F-measure', np.mean(f1_scores))
+
         for idx, rand_idx in enumerate(list(rand_indices)):
             i = outputs["input"][rand_idx].squeeze()
             t = outputs["target"][rand_idx].squeeze()
             p = outputs["pred"][rand_idx].squeeze()
+
+            ref_beats, est_beats, est_sm = find_beats(t, 
+                                                      p, 
+                                                      sample_rate=self.hparams.sample_rate)
 
             # log audio examples
             self.logger.experiment.add_audio(f"input/{idx}",  
@@ -133,8 +152,12 @@ class Base(pl.LightningModule):
                                              (p+t)/2, self.global_step, 
                                              sample_rate=self.hparams.sample_rate)
 
+            # log beats plots
             self.logger.experiment.add_image(f"act/{idx}",
-                                             plot_activations(p, t),
+                                             plot_activations(ref_beats, 
+                                                              est_beats, 
+                                                              est_sm,
+                                                              self.hparams.sample_rate),
                                              self.global_step)
 
             if self.hparams.save_dir is not None:
