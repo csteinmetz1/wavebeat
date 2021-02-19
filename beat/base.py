@@ -44,7 +44,7 @@ class Base(pl.LightningModule):
 
     @torch.jit.unused   
     def training_step(self, batch, batch_idx):
-        input, target, metadata = batch
+        input, target = batch
 
         # pass the input thrgouh the mode
         pred = self(input)
@@ -115,7 +115,10 @@ class Base(pl.LightningModule):
             "input" : input_crop.cpu().numpy(),
             "target": target_crop.cpu().numpy(),
             "pred"  : pred.cpu().numpy(),
-            "filename" : metadata['filename']}
+            "Filename" : metadata['Filename'],
+            "Genre" : metadata['Genre'],
+            "Time signature" : metadata['Time signature']
+            }
 
         return outputs
 
@@ -126,16 +129,20 @@ class Base(pl.LightningModule):
             "input" : [],
             "target" : [],
             "pred" : [],
-            "filename" : []}
+            "Filename" : [],
+            "Genre" : [],
+            "Time signature" : []}
+
+        metadata_keys = ["Filename", "Genre", "Time signature"]
 
         for out in validation_step_outputs:
             for key, val in out.items():
-                if key != "filename":
+                if key not in metadata_keys:
                     bs = val.shape[0]
                 else:
                     bs = len(val)
                 for bidx in np.arange(bs):
-                    if key != "filename":
+                    if key not in metadata_keys:
                         outputs[key].append(val[bidx,...])
                     else:
                         outputs[key].append(val[bidx])
@@ -152,7 +159,9 @@ class Base(pl.LightningModule):
         for idx in np.arange(len(outputs["input"])):
             t = outputs["target"][idx].squeeze()
             p = outputs["pred"][idx].squeeze()
-            f = outputs["filename"][idx]
+            f = outputs["Filename"][idx]
+            g = outputs["Genre"][idx]
+            s = outputs["Time signature"][idx]
 
             # separate the beats and downbeat activations
             t_beats = t[0,:]
@@ -180,6 +189,8 @@ class Base(pl.LightningModule):
 
             songs.append({
                 "Filename" : f,
+                "Genre" : g,
+                "Time signature" : s,
                 "Beat F-measure" : beat_scores['F-measure'],
                 "Downbeat F-measure" : downbeat_scores['F-measure']
             })

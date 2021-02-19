@@ -3,6 +3,7 @@ import sys
 import glob
 import torch 
 import julius
+import random
 import torchaudio
 import numpy as np
 import scipy.signal
@@ -58,7 +59,8 @@ class BallroomDataset(torch.utils.data.Dataset):
 
         # first get all of the audio files
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", "*.wav"))
-        self.audio_files.sort() # sort the list of audio files
+        #self.audio_files.sort() # sort the list of audio files
+        random.shuffle(self.audio_files)
 
         if self.subset == "train":
             start = 0
@@ -96,8 +98,12 @@ class BallroomDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
 
+        # get metadata of example
+        filename = self.audio_files[idx]
+        genre = os.path.basename(os.path.dirname(filename))
+
         # first load the audio file
-        audio, sr = torchaudio.load(self.audio_files[idx])
+        audio, sr = torchaudio.load(filename)
 
         # resample if needed
         if sr != self.sample_rate:
@@ -107,7 +113,8 @@ class BallroomDataset(torch.utils.data.Dataset):
         audio /= audio.abs().max()
 
         # now get the annotation information
-        beat_samples, downbeat_samples, beat_indices = self.load_annot(self.annot_files[idx])
+        annot = self.load_annot(self.annot_files[idx])
+        beat_samples, downbeat_samples, beat_indices, time_signature = annot
 
         # now we construct the target sequence with beat (1) and no beat (0)
         N = audio.shape[-1]
@@ -154,10 +161,20 @@ class BallroomDataset(torch.utils.data.Dataset):
             target = target[:,:self.length]
 
         metadata = {
-            "filename" : self.audio_files[idx]
+            "Filename" : filename,
+            "Genre" : genre,
+            "Time signature" : time_signature
         }
 
-        return audio, target, metadata
+        if self.subset == "train":
+            print(audio.shape, target.shape)
+            return audio, target
+        elif self.subset in ["val", "test"]:
+            # this will only work with batch size = 1
+            print(audio.shape, target.shape, metadata)
+            return audio, target, metadata
+        else:
+            raise RuntimeError(f"Invalid subset: `{self.subset}`")
 
     def load_annot(self, filename):
 
@@ -167,6 +184,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         beat_samples = [] # array of samples containing beats
         downbeat_samples = [] # array of samples containing downbeats (1)
         beat_indices = [] # array of beat type one-hot encoded  
+        time_signature = None # estimated time signature (only 3/4 or 4/4)
 
         for line in lines:
             line = line.strip('\n')
@@ -180,7 +198,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             elif beat == 2:
                 beat_one_hot = [0,1,0,0]
             elif beat == 3:
-                beat_one_hot = [0,0,1,0]            
+                beat_one_hot = [0,0,1,0]    
             elif beat == 4:
                 beat_one_hot = [0,0,0,1]
 
@@ -188,13 +206,23 @@ class BallroomDataset(torch.utils.data.Dataset):
             beat_time_samples = int(float(time_sec) * (self.sample_rate))
 
             beat_samples.append(beat_time_samples)
-            beat_indices.append(beat_one_hot)
+            beat_indices.append(beat)
 
             if beat == 1:
                 downbeat_time_samples = int(float(time_sec) * (self.sample_rate))
                 downbeat_samples.append(downbeat_time_samples)
 
-        return beat_samples, downbeat_samples, beat_indices
+        # guess at the time signature
+        if np.max(beat_indices) == 2:
+            time_signature = "2/4"
+        elif np.max(beat_indices) == 3:
+            time_signature = "3/4"
+        elif np.max(beat_indices) == 4:
+            time_signature = "4/4"
+        else:
+            time_signature = "?"
+
+        return beat_samples, downbeat_samples, beat_indices, time_signature
 
     def apply_augmentations(self, audio, target):
 

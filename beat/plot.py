@@ -47,13 +47,20 @@ def plot_activations(ref_beats,
 
     return image
 
-def make_table(songs):
+def make_table(songs, sort_key="Beat F-measure"):
+
+    # first sort by ascending f-measure on beats
+    songs = sorted(songs, key=lambda k: k[sort_key])
 
     table = ""
-    table += "| File     | Beat F-measure |  Downbeat F-measure |\n"
-    table += "|:---------|---------------:|--------------------:|\n"
+    table += "| File     | Genre | Time Sig.| Beat F-measure |  Downbeat F-measure |\n"
+    table += "|:---------|-------|----------|---------------:|--------------------:|\n"
 
     for song in songs:
-        table += f"""| {os.path.basename(song["Filename"])} | {song["Beat F-measure"]:0.3f} | {song["Downbeat F-measure"]:0.3f} |\n"""
+        table += f"""| {os.path.basename(song["Filename"])} |"""
+        table += f"""  {song["Genre"]} |"""
+        table += f"""  {song["Time signature"]} |"""
+        table += f"""{song["Beat F-measure"]:0.3f} | """
+        table += f"""{song["Downbeat F-measure"]:0.3f} |\n"""
 
     return table
