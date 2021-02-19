@@ -5,6 +5,8 @@ import torch
 import julius
 import torchaudio
 import numpy as np
+import scipy.signal
+import soxbindings as sox 
 
 torchaudio.set_audio_backend("sox_io")
 
@@ -26,7 +28,8 @@ class BallroomDataset(torch.utils.data.Dataset):
                  half=True, 
                  fraction=1.0,
                  augment=False,
-                 dry_run=False):
+                 dry_run=False,
+                 pad_mode='reflect'):
         """
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
@@ -38,7 +41,8 @@ class BallroomDataset(torch.utils.data.Dataset):
             half (bool, optional): Store the float32 audio as float16. (Default: True)
             fraction (float, optional): Fraction of the data to load from the subset. (Default: 1.0)
             augment (bool, optional): Apply random data augmentations to input audio. (Default: False)
-            dry_run (bool, optional): Train on a single example.
+            dry_run (bool, optional): Train on a single example. (Default: False)
+            pad_mode (str, optional): Padding type for inputs 'constant', 'reflect', 'replicate' or 'circular'. (Default: 'constant')
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
@@ -50,6 +54,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.fraction = fraction
         self.augment = augment
         self.dry_run = dry_run
+        self.pad_mode = pad_mode
 
         # first get all of the audio files
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", "*.wav"))
@@ -67,13 +72,15 @@ class BallroomDataset(torch.utils.data.Dataset):
         elif self.subset == "full":
             start = 0
             stop = -1
-        
-        # now pick out subset of audio files
-        self.audio_files = self.audio_files[start:stop]
-        print(f"Selected {len(self.audio_files)} files for {self.subset} set.")
 
         # select one file for the dry run
-        if self.dry_run: self.audio_files = [self.audio_files[0]] * 50
+        if self.dry_run: 
+            self.audio_files = [self.audio_files[0]] * 50
+            print(f"Selected 1 file for dry run.")
+        else:
+            # now pick out subset of audio files
+            self.audio_files = self.audio_files[start:stop]
+            print(f"Selected {len(self.audio_files)} files for {self.subset} set.")
 
         self.annot_files = []
         for audio_file in self.audio_files:
@@ -95,6 +102,9 @@ class BallroomDataset(torch.utils.data.Dataset):
         # resample if needed
         if sr != self.sample_rate:
             audio = julius.resample_frac(audio, sr, self.sample_rate)   
+        
+        # normalize all inputs -1 to 1
+        audio /= audio.abs().max()
 
         # now get the annotation information
         beat_samples, downbeat_samples, beat_indices = self.load_annot(self.annot_files[idx])
@@ -105,25 +115,9 @@ class BallroomDataset(torch.utils.data.Dataset):
         target[0,beat_samples] = 1  # first channel is beats
         target[1,downbeat_samples] = 1  # second channel is downbeats
 
-        # apply augmentations
-        if self.augment:
-            if np.random.rand() < 0.2:      # random gain from 0dB to -12 dB
-                audio = audio * (10**(-(np.random.rand() * 12)/20))   
-            if np.random.rand() < 0.5:      # phase inversion
-                audio = -audio                              
-            if np.random.rand() < 0.2:      # apply compression
-                audio = torch.tanh(audio)      
-            if np.random.rand() < 0.05:     # drop frames
-                zero_size = int(self.length*0.1)
-                start = np.random.randint(audio.shape[-1] - zero_size - 1)
-                stop = start + zero_size
-                audio[:,start:stop] = 0
-                target[:,start:stop] = 0
-            if np.random.rand() < 0.5:      # shift targets forward/back max 10ms
-                max_shift = int(0.10 * self.sample_rate)
-                shift = np.random.randint(0, high=max_shift)
-                direction = np.random.choice([-1,1])
-                target = torch.roll(target, shift * direction)          
+        # apply augmentations 
+        if self.augment: 
+            audio, target = self.apply_augmentations(audio, target)
 
         # now we take a random crop of both
         if (N - self.length - 1) < 0:
@@ -139,10 +133,31 @@ class BallroomDataset(torch.utils.data.Dataset):
         # check the length and pad if
         if audio.shape[-1] < self.length:
             pad_size = self.length - audio.shape[-1]
-            audio = torch.nn.functional.pad(audio, (pad_size,0))
-            target = torch.nn.functional.pad(target, (pad_size,0))
+            pad_left = pad_size - (pad_size // 2)
+            pad_right = pad_size // 2
+            audio = torch.nn.functional.pad(audio.view(1,1,-1),
+                                           (pad_left,pad_right),
+                                           mode=self.pad_mode)
+            audio = audio.view(1,-1)
+        elif audio.shape[-1] > self.length:
+            audio = audio[:,:self.length]
 
-        return audio, target
+        if target.shape[-1] < self.length:
+            pad_size = self.length - target.shape[-1]
+            pad_left = pad_size - (pad_size // 2)
+            pad_right = pad_size // 2
+            target = torch.nn.functional.pad(target.view(1,2,-1),
+                                             (pad_left,pad_right),
+                                             mode=self.pad_mode)
+            target = target.view(2,-1)
+        elif target.shape[-1] > self.length:
+            target = target[:,:self.length]
+
+        metadata = {
+            "filename" : self.audio_files[idx]
+        }
+
+        return audio, target, metadata
 
     def load_annot(self, filename):
 
@@ -180,3 +195,83 @@ class BallroomDataset(torch.utils.data.Dataset):
                 downbeat_samples.append(downbeat_time_samples)
 
         return beat_samples, downbeat_samples, beat_indices
+
+    def apply_augmentations(self, audio, target):
+
+        # random gain from 0dB to -6 dB
+        #if np.random.rand() < 0.2:      
+        #    #sgn = np.random.choice([-1,1])
+        #    audio = audio * (10**((-1 * np.random.rand() * 6)/20))   
+
+        # phase inversion
+        if np.random.rand() < 0.5:      
+            audio = -audio                              
+
+        # apply nonlinear distortion 
+        if np.random.rand() < 0.2:   
+            g = 10**((np.random.rand() * 12)/20)   
+            audio = torch.tanh(audio)    
+
+        # drop continguous frames
+        if np.random.rand() < 0.05:     
+            zero_size = int(self.length*0.1)
+            start = np.random.randint(audio.shape[-1] - zero_size - 1)
+            stop = start + zero_size
+            audio[:,start:stop] = 0
+            target[:,start:stop] = 0
+
+        # shift targets forward/back max 10ms
+        if np.random.rand() < 0.4:      
+            max_shift = int(0.10 * self.sample_rate)
+            shift = np.random.randint(0, high=max_shift)
+            direction = np.random.choice([-1,1])
+            target = torch.roll(target, shift * direction)
+
+        # apply time stretching
+        #if np.random.rand() < 0.0:
+        #    sgn = np.random.choice([-1,1])
+        #    factor = sng * np.random.rand() * 0.2     
+        #    tfm = sox.Transformer()        
+        #    tfm.tempo(factor, 'm')
+        #    audio = tfm.build_array(input_array=audio, 
+        #                            sample_rate_in=self.sample_rate)
+    
+        # apply pitch shifting
+        if np.random.rand() < 0.5:
+            sgn = np.random.choice([-1,1])
+            factor = sgn * np.random.rand() * 12.0     
+            tfm = sox.Transformer()        
+            tfm.pitch(factor)
+            audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
+                                    sample_rate_in=self.sample_rate)
+            audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
+
+        # apply a lowpass filter
+        if np.random.rand() < 0.25:
+            cutoff = (np.random.rand() * 4000) + 4000
+            sos = scipy.signal.butter(2, 
+                                      cutoff, 
+                                      btype="lowpass", 
+                                      fs=self.sample_rate, 
+                                      output='sos')
+            audio_filtered = scipy.signal.sosfilt(sos, audio.numpy())
+            audio = torch.from_numpy(audio_filtered.astype('float32'))
+
+        # apply a highpass filter
+        if np.random.rand() < 0.25:
+            cutoff = (np.random.rand() * 1000) + 20
+            sos = scipy.signal.butter(2, 
+                                      cutoff, 
+                                      btype="highpass", 
+                                      fs=self.sample_rate, 
+                                      output='sos')
+            audio_filtered = scipy.signal.sosfilt(sos, audio.numpy())
+            audio = torch.from_numpy(audio_filtered.astype('float32'))
+
+        # add white noise
+        if np.random.rand() < 0.1:
+            wn = (torch.rand(audio.shape) * 2) - 1
+            g = 10**(-(np.random.rand() * 20) - 12)/20
+            audio = audio + (g * wn)
+
+        return audio, target
