@@ -8,8 +8,8 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from beat.utils import center_crop, causal_crop
-from beat.plot import plot_activations
-from beat.loss import GlobalMSELoss
+from beat.plot import plot_activations, make_table
+from beat.loss import GlobalMSELoss, GlobalBCELoss
 from beat.peak import find_beats
 from beat.filter import FIRFilter
 
@@ -37,23 +37,24 @@ class Base(pl.LightningModule):
         self.l2 = torch.nn.MSELoss()
         self.bce = torch.nn.BCELoss()
         self.gmse = GlobalMSELoss()
+        self.gbce = GlobalBCELoss()
 
     def forward(self, x, p):
         pass
 
     @torch.jit.unused   
     def training_step(self, batch, batch_idx):
-        input, target = batch
+        input, target, metadata = batch
 
         # pass the input thrgouh the mode
         pred = self(input)
 
         # apply lowpass filters
-        pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
-        pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
+        #pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
+        #pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
 
         # combine back
-        pred = torch.cat((pred_beats, pred_downbeats), dim=1)
+        #pred = torch.cat((pred_beats, pred_downbeats), dim=1)
         #target = torch.cat((target_beats, target_downbeats), dim=1)
 
         # crop the input and target signals
@@ -63,7 +64,7 @@ class Base(pl.LightningModule):
             target = center_crop(target, pred.shape[-1])
 
         # compute the error using appropriate loss      
-        loss, _, _ = self.gmse(pred, target)
+        loss, _, _ = self.gbce(pred, target)
 
         self.log('train_loss', 
                  loss, 
@@ -76,17 +77,17 @@ class Base(pl.LightningModule):
 
     @torch.jit.unused
     def validation_step(self, batch, batch_idx):
-        input, target = batch
+        input, target, metadata = batch
 
         # pass the input thrgouh the mode
         pred = self(input)
 
         # apply lowpass filters
-        pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
-        pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
+        #pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
+        #pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
 
         # combine back (we don't filter the target)
-        pred = torch.cat((pred_beats, pred_downbeats), dim=1)
+        #pred = torch.cat((pred_beats, pred_downbeats), dim=1)
         #target = torch.cat((target_beats, target_downbeats), dim=1)
 
         # crop the input and target signals
@@ -101,7 +102,7 @@ class Base(pl.LightningModule):
         #bce_loss = self.bce(pred, target_crop)
         #l1_loss = self.l1(pred, target_crop)
         #l2_loss = self.l2(pred, target_crop)
-        gmse_loss, _, _ = self.gmse(pred, target_crop)
+        gmse_loss, _, _ = self.gbce(pred, target_crop)
 
         self.log('val_loss', gmse_loss)
         #self.log('val_loss/L1', l1_loss)
@@ -113,7 +114,8 @@ class Base(pl.LightningModule):
         outputs = {
             "input" : input_crop.cpu().numpy(),
             "target": target_crop.cpu().numpy(),
-            "pred"  : pred.cpu().numpy()}
+            "pred"  : pred.cpu().numpy(),
+            "filename" : metadata['filename']}
 
         return outputs
 
@@ -123,13 +125,20 @@ class Base(pl.LightningModule):
         outputs = {
             "input" : [],
             "target" : [],
-            "pred" : []}
+            "pred" : [],
+            "filename" : []}
 
         for out in validation_step_outputs:
             for key, val in out.items():
-                bs = val.shape[0]
+                if key != "filename":
+                    bs = val.shape[0]
+                else:
+                    bs = len(val)
                 for bidx in np.arange(bs):
-                    outputs[key].append(val[bidx,...])
+                    if key != "filename":
+                        outputs[key].append(val[bidx,...])
+                    else:
+                        outputs[key].append(val[bidx])
 
         example_indices = np.arange(len(outputs["input"]))
         rand_indices = np.random.choice(example_indices,
@@ -137,11 +146,13 @@ class Base(pl.LightningModule):
                                         size=np.min([len(outputs["input"]), self.hparams.num_examples]))
 
         # compute metrics 
+        songs = []
         beat_f1_scores = []
         downbeat_f1_scores = []
         for idx in np.arange(len(outputs["input"])):
             t = outputs["target"][idx].squeeze()
             p = outputs["pred"][idx].squeeze()
+            f = outputs["filename"][idx]
 
             # separate the beats and downbeat activations
             t_beats = t[0,:]
@@ -160,17 +171,28 @@ class Base(pl.LightningModule):
             # evaluate beats - trim beats before 5 seconds.
             ref_beats = mir_eval.beat.trim_beats(ref_beats)
             est_beats = mir_eval.beat.trim_beats(est_beats)
-            scores = mir_eval.beat.evaluate(ref_beats, est_beats)
-            beat_f1_scores.append(scores["F-measure"])
+            beat_scores = mir_eval.beat.evaluate(ref_beats, est_beats)
 
             # evaluate downbeats - trim beats before 5 seconds.
             ref_downbeats = mir_eval.beat.trim_beats(ref_downbeats)
             est_downbeats = mir_eval.beat.trim_beats(est_downbeats)
-            scores = mir_eval.beat.evaluate(ref_downbeats, est_downbeats)
-            downbeat_f1_scores.append(scores["F-measure"])
+            downbeat_scores = mir_eval.beat.evaluate(ref_downbeats, est_downbeats)
+
+            songs.append({
+                "Filename" : f,
+                "Beat F-measure" : beat_scores['F-measure'],
+                "Downbeat F-measure" : downbeat_scores['F-measure']
+            })
+
+            beat_f1_scores.append(beat_scores['F-measure'])
+            downbeat_f1_scores.append(downbeat_scores['F-measure'])
 
         self.log('val_loss/Beat F-measure', np.mean(beat_f1_scores))
         self.log('val_loss/Downbeat F-measure', np.mean(downbeat_f1_scores))
+
+        self.logger.experiment.add_text("perf", 
+                                        make_table(songs),
+                                        self.global_step)
 
         for idx, rand_idx in enumerate(list(rand_indices)):
             i = outputs["input"][rand_idx].squeeze()

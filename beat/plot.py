@@ -1,4 +1,5 @@
 import io
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import PIL.Image
@@ -14,13 +15,13 @@ def plot_activations(ref_beats,
 
     plt.figure(figsize=(12,3))
 
-    plt.vlines(ref_beats, 1.55, 1.95, colors='lightcoral')
-    plt.vlines(est_beats, 1.05, 1.45, colors='lightsteelblue') 
+    plt.vlines(ref_beats, 1.55, 1.75, colors='lightcoral')
+    plt.vlines(est_beats, 1.05, 1.25, colors='lightsteelblue') 
 
     if ref_downbeats is not None:
-        plt.vlines(ref_downbeats, 1.75, 1.95, colors='red')
+        plt.vlines(ref_downbeats, 1.80, 1.95, colors='red')
     if est_downbeats is not None:
-        plt.vlines(est_downbeats, 1.25, 1.45, colors='blue')
+        plt.vlines(est_downbeats, 1.30, 1.45, colors='blue')
 
     t = np.arange(len(est_sm))/sample_rate
     plt.plot(t, 0.45 * est_sm, c="lightsteelblue")
@@ -45,3 +46,14 @@ def plot_activations(ref_beats,
     plt.close('all')
 
     return image
+
+def make_table(songs):
+
+    table = ""
+    table += "| File     | Beat F-measure |  Downbeat F-measure |\n"
+    table += "|:---------|---------------:|--------------------:|\n"
+
+    for song in songs:
+        table += f"""| {os.path.basename(song["Filename"])} | {song["Beat F-measure"]:0.3f} | {song["Downbeat F-measure"]:0.3f} |\n"""
+
+    return table

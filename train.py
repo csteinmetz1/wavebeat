@@ -82,7 +82,7 @@ val_dataset = BallroomDataset(args.audio_dir,
 
 val_dataloader = torch.utils.data.DataLoader(val_dataset, 
                                             shuffle=args.shuffle,
-                                            batch_size=8,
+                                            batch_size=4,
                                             num_workers=args.num_workers,
                                             pin_memory=True)
 
