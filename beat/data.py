@@ -30,7 +30,7 @@ class BallroomDataset(torch.utils.data.Dataset):
                  fraction=1.0,
                  augment=False,
                  dry_run=False,
-                 pad_mode='reflect'):
+                 pad_mode='constant'):
         """
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
@@ -167,11 +167,9 @@ class BallroomDataset(torch.utils.data.Dataset):
         }
 
         if self.subset == "train":
-            print(audio.shape, target.shape)
             return audio, target
         elif self.subset in ["val", "test"]:
             # this will only work with batch size = 1
-            print(audio.shape, target.shape, metadata)
             return audio, target, metadata
         else:
             raise RuntimeError(f"Invalid subset: `{self.subset}`")
@@ -235,11 +233,6 @@ class BallroomDataset(torch.utils.data.Dataset):
         if np.random.rand() < 0.5:      
             audio = -audio                              
 
-        # apply nonlinear distortion 
-        if np.random.rand() < 0.2:   
-            g = 10**((np.random.rand() * 12)/20)   
-            audio = torch.tanh(audio)    
-
         # drop continguous frames
         if np.random.rand() < 0.05:     
             zero_size = int(self.length*0.1)
@@ -249,11 +242,33 @@ class BallroomDataset(torch.utils.data.Dataset):
             target[:,start:stop] = 0
 
         # shift targets forward/back max 10ms
-        if np.random.rand() < 0.4:      
-            max_shift = int(0.10 * self.sample_rate)
-            shift = np.random.randint(0, high=max_shift)
-            direction = np.random.choice([-1,1])
-            target = torch.roll(target, shift * direction)
+        if np.random.rand() < 0.75:      
+            
+            # this is the old method (shift all beats)
+            #max_shift = int(0.070 * self.sample_rate)
+            #shift = np.random.randint(0, high=max_shift)
+            #direction = np.random.choice([-1,1])
+            #target = torch.roll(target, shift * direction)
+
+            # in this method we shift each beat and downbeat by a random amount
+            max_shift = int(0.070 * self.sample_rate)
+
+            beat_ind = (target[0,:] == 1).nonzero(as_tuple=False)
+            beat_shifts = ((torch.rand(beat_ind.shape[-1]) * 2) - 1) * max_shift
+            beat_ind += beat_shifts.long()
+            beat_ind = beat_ind[beat_ind < target.shape[-1]]
+
+            dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
+            dbeat_shifts = ((torch.rand(dbeat_ind.shape[-1]) * 2) - 1) * max_shift
+            dbeat_ind += dbeat_shifts.long()
+            dbeat_ind = dbeat_ind[dbeat_ind < target.shape[-1]]  # ensure we have no beats beyond max index
+
+            # now convert indices back to target vector
+            shifted_target = torch.zeros(2,target.shape[-1])
+            shifted_target[0,beat_ind] = 1
+            shifted_target[1,dbeat_ind] = 1
+
+            target = shifted_target
 
         # apply time stretching
         #if np.random.rand() < 0.0:
@@ -297,9 +312,14 @@ class BallroomDataset(torch.utils.data.Dataset):
             audio = torch.from_numpy(audio_filtered.astype('float32'))
 
         # add white noise
-        if np.random.rand() < 0.1:
+        if np.random.rand() < 0.05:
             wn = (torch.rand(audio.shape) * 2) - 1
             g = 10**(-(np.random.rand() * 20) - 12)/20
             audio = audio + (g * wn)
+
+        # apply nonlinear distortion 
+        if np.random.rand() < 0.2:   
+            g = 10**((np.random.rand() * 12)/20)   
+            audio = torch.tanh(audio)    
 
         return audio, target
