@@ -47,6 +47,34 @@ def plot_activations(ref_beats,
 
     return image
 
+def plot_histogram(songs):
+
+    beat_f1_scores = []
+    downbeat_f1_scores = []
+
+    for song in songs:
+        beat_f1_scores.append(song["Beat F-measure"])
+        downbeat_f1_scores.append(song["Downbeat F-measure"])
+
+    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(12,6))
+
+    axs[0].hist(beat_f1_scores, bins=10)
+    axs[0].set_xlabel('Beat F-measure')
+
+    axs[1].hist(downbeat_f1_scores, bins=10)
+    axs[1].set_xlabel('Downbeat F-measure')
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    buf.seek(0)
+
+    image = PIL.Image.open(buf)
+    image = ToTensor()(image)
+
+    plt.close('all')
+
+    return image
+
 def make_table(songs, sort_key="Beat F-measure"):
 
     # first sort by ascending f-measure on beats
