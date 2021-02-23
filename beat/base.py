@@ -7,9 +7,9 @@ import torchsummary
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
-from beat.utils import center_crop, causal_crop
-from beat.plot import plot_activations, make_table
+from beat.plot import plot_activations, make_table, plot_histogram
 from beat.loss import GlobalMSELoss, GlobalBCELoss
+from beat.utils import center_crop, causal_crop
 from beat.peak import find_beats
 from beat.filter import FIRFilter
 
@@ -204,7 +204,12 @@ class Base(pl.LightningModule):
         self.logger.experiment.add_text("perf", 
                                         make_table(songs),
                                         self.global_step)
-
+    
+        # log score histograms plots
+        self.logger.experiment.add_image(f"hist/F-measure",
+                                         plot_histogram(songs),
+                                         self.global_step)
+ 
         for idx, rand_idx in enumerate(list(rand_indices)):
             i = outputs["input"][rand_idx].squeeze()
             t = outputs["target"][rand_idx].squeeze()
@@ -280,7 +285,7 @@ class Base(pl.LightningModule):
     @torch.jit.unused
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, verbose=True)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=20, verbose=True)
         return {
             'optimizer': optimizer,
             'lr_scheduler': lr_scheduler,
