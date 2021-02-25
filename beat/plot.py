@@ -30,7 +30,7 @@ def plot_activations(ref_beats,
         plt.plot(t, (0.45 * est_downbeats_sm) + 0.5, c="blue")
 
     plt.ylim([0, 2])
-    if len(ref_beats > 0):
+    if len(ref_beats) > 0:
         plt.xlim([ref_beats[0], ref_beats[-1]])
 
     plt.xlabel("Time (s)")

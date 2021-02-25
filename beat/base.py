@@ -1,5 +1,6 @@
 import os
 import torch
+import madmom
 import mir_eval
 import torchaudio
 import numpy as np
@@ -152,10 +153,16 @@ class Base(pl.LightningModule):
                                         replace=False,
                                         size=np.min([len(outputs["input"]), self.hparams.num_examples]))
 
+        #dbn = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
+        #                                beats_per_bar=[3, 4], 
+        #                                fps=self.hparams.target_sample_rate)
+
         # compute metrics 
         songs = []
         beat_f1_scores = []
         downbeat_f1_scores = []
+        #dbn_beat_f1_scores = []
+        #dbn_downbeat_f1_scores = []
         for idx in np.arange(len(outputs["input"])):
             t = outputs["target"][idx].squeeze()
             p = outputs["pred"][idx].squeeze()
@@ -172,11 +179,16 @@ class Base(pl.LightningModule):
             ref_beats, est_beats, _ = find_beats(t_beats, 
                                                  p_beats, 
                                                  beat_type="beat",
-                                                 sample_rate=self.hparams.sample_rate)
+                                                 sample_rate=self.hparams.target_sample_rate)
             ref_downbeats, est_downbeats, _ = find_beats(t_downbeats, 
                                                          p_downbeats, 
                                                          beat_type="downbeat",
-                                                         sample_rate=self.hparams.sample_rate)
+                                                         sample_rate=self.hparams.target_sample_rate)
+
+            #dbn_beats = dbn(t.T).T
+            #dbn_est_beats = dbn_beats[0,:] 
+            #dnb_est_downbeats = dbn_beats[1,:] 
+            
             # evaluate beats - trim beats before 5 seconds.
             ref_beats = mir_eval.beat.trim_beats(ref_beats)
             est_beats = mir_eval.beat.trim_beats(est_beats)
@@ -187,19 +199,32 @@ class Base(pl.LightningModule):
             est_downbeats = mir_eval.beat.trim_beats(est_downbeats)
             downbeat_scores = mir_eval.beat.evaluate(ref_downbeats, est_downbeats)
 
+            # evaluate beats from DBN
+            #est_dbn_beats = mir_eval.beat.trim_beats(dbn_est_beats)
+            #dbn_beat_scores = mir_eval.beat.evaluate(ref_beats, est_dbn_beats)
+
+            #est_dbn_downbeats = mir_eval.beat.trim_beats(dnb_est_downbeats)
+            #dbn_downbeat_scores = mir_eval.beat.evaluate(ref_downbeats, dnb_est_downbeats)
+
             songs.append({
                 "Filename" : f,
                 "Genre" : g,
                 "Time signature" : s,
                 "Beat F-measure" : beat_scores['F-measure'],
-                "Downbeat F-measure" : downbeat_scores['F-measure']
+                "Downbeat F-measure" : downbeat_scores['F-measure'],
+                #"(DBN) Beat F-measure" : dbn_beat_scores['F-measure'],
+                #"(DBN) Downbeat F-measure" : dbn_downbeat_scores['F-measure']
             })
 
             beat_f1_scores.append(beat_scores['F-measure'])
             downbeat_f1_scores.append(downbeat_scores['F-measure'])
+            #dbn_beat_f1_scores.append(dbn_beat_scores['F-measure'])
+            #dbn_downbeat_f1_scores.append(dbn_downbeat_scores['F-measure'])
 
         self.log('val_loss/Beat F-measure', np.mean(beat_f1_scores))
         self.log('val_loss/Downbeat F-measure', np.mean(downbeat_f1_scores))
+        #self.log('val_loss/(DBN) Beat F-measure', np.mean(dbn_beat_f1_scores))
+        #self.log('val_loss/(DBN) Downbeat F-measure', np.mean(dbn_downbeat_f1_scores))
 
         self.logger.experiment.add_text("perf", 
                                         make_table(songs),
@@ -223,16 +248,16 @@ class Base(pl.LightningModule):
             ref_beats, est_beats, est_sm = find_beats(t_beats, 
                                                       p_beats, 
                                                       beat_type="beat",
-                                                      sample_rate=self.hparams.sample_rate)
+                                                      sample_rate=self.hparams.target_sample_rate)
 
             ref_downbeats, est_downbeats, est_downbeat_sm = find_beats(t_downbeats, 
                                                                        p_downbeats, 
                                                                        beat_type="downbeat",
-                                                                       sample_rate=self.hparams.sample_rate)
+                                                                       sample_rate=self.hparams.target_sample_rate)
             # log audio examples
             self.logger.experiment.add_audio(f"input/{idx}",  
                                              i, self.global_step, 
-                                             sample_rate=self.hparams.sample_rate)
+                                             sample_rate=self.hparams.audio_sample_rate)
             #self.logger.experiment.add_audio(f"target/{idx}", 
             #                                 t, self.global_step, 
             #                                 sample_rate=self.hparams.sample_rate)
@@ -245,7 +270,7 @@ class Base(pl.LightningModule):
                                              plot_activations(ref_beats, 
                                                               est_beats, 
                                                               est_sm,
-                                                              self.hparams.sample_rate,
+                                                              self.hparams.target_sample_rate,
                                                               ref_downbeats=ref_downbeats,
                                                               est_downbeats=est_downbeats,
                                                               est_downbeats_sm=est_downbeat_sm,
@@ -262,17 +287,17 @@ class Base(pl.LightningModule):
                 if not os.path.isfile(input_filename):
                     torchaudio.save(input_filename, 
                                     torch.tensor(i).view(1,-1).float(),
-                                    sample_rate=self.hparams.sample_rate)
+                                    sample_rate=self.hparams.audio_sample_rate)
 
                 if not os.path.isfile(target_filename):
                     torchaudio.save(target_filename,
                                     torch.tensor(t).view(1,-1).float(),
-                                    sample_rate=self.hparams.sample_rate)
+                                    sample_rate=self.hparams.audio_sample_rate)
 
                 torchaudio.save(os.path.join(self.hparams.save_dir, 
                                 f"{idx}-pred-{self.hparams.train_loss}-{int(prm[0]):1d}-{prm[1]:0.2f}.wav"), 
                                 torch.tensor(p).view(1,-1).float(),
-                                sample_rate=self.hparams.sample_rate)
+                                sample_rate=self.hparams.audio_sample_rate)
 
     @torch.jit.unused
     def test_step(self, batch, batch_idx):

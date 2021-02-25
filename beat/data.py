@@ -22,7 +22,8 @@ class BallroomDataset(torch.utils.data.Dataset):
     def __init__(self, 
                  audio_dir, 
                  annot_dir, 
-                 sample_rate=44100, 
+                 audio_sample_rate=44100, 
+                 target_factor=220,
                  subset="train", 
                  length=16384, 
                  preload=False, 
@@ -47,7 +48,9 @@ class BallroomDataset(torch.utils.data.Dataset):
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
-        self.sample_rate = sample_rate
+        self.audio_sample_rate = audio_sample_rate
+        self.target_factor = target_factor
+        self.target_sample_rate = audio_sample_rate / target_factor
         self.subset = subset
         self.length = length
         self.preload = preload
@@ -56,6 +59,10 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.augment = augment
         self.dry_run = dry_run
         self.pad_mode = pad_mode
+
+        self.target_length = int(self.length / self.target_factor)
+        print(f"Audio length: {self.length}")
+        print(f"Target length: {self.target_length}")
 
         # first get all of the audio files
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", "*.wav"))
@@ -106,8 +113,8 @@ class BallroomDataset(torch.utils.data.Dataset):
         audio, sr = torchaudio.load(filename)
 
         # resample if needed
-        if sr != self.sample_rate:
-            audio = julius.resample_frac(audio, sr, self.sample_rate)   
+        if sr != self.audio_sample_rate:
+            audio = julius.resample_frac(audio, sr, self.audio_sample_rate)   
         
         # normalize all inputs -1 to 1
         audio /= audio.abs().max()
@@ -117,8 +124,20 @@ class BallroomDataset(torch.utils.data.Dataset):
         beat_samples, downbeat_samples, beat_indices, time_signature = annot
 
         # now we construct the target sequence with beat (1) and no beat (0)
-        N = audio.shape[-1]
+        beat_sample_rate = 100
+
+        # convert beat_samples to beat_seconds
+        beat_sec = np.array(beat_samples) / self.audio_sample_rate
+        downbeat_sec = np.array(downbeat_samples) / self.audio_sample_rate
+
+        t = audio.shape[-1]/self.audio_sample_rate # audio length in sec
+        N = int(t * self.target_sample_rate) + 1             # target length in samples
         target = torch.zeros(2,N)
+
+        # now convert from seconds to new sample rate
+        beat_samples = beat_sec * self.target_sample_rate
+        downbeat_samples = downbeat_sec * self.target_sample_rate
+
         target[0,beat_samples] = 1  # first channel is beats
         target[1,downbeat_samples] = 1  # second channel is downbeats
 
@@ -149,16 +168,16 @@ class BallroomDataset(torch.utils.data.Dataset):
         elif audio.shape[-1] > self.length:
             audio = audio[:,:self.length]
 
-        if target.shape[-1] < self.length:
-            pad_size = self.length - target.shape[-1]
+        if target.shape[-1] < self.target_length:
+            pad_size = self.target_length - target.shape[-1]
             pad_left = pad_size - (pad_size // 2)
             pad_right = pad_size // 2
             target = torch.nn.functional.pad(target.view(1,2,-1),
                                              (pad_left,pad_right),
                                              mode=self.pad_mode)
             target = target.view(2,-1)
-        elif target.shape[-1] > self.length:
-            target = target[:,:self.length]
+        elif target.shape[-1] > self.target_length:
+            target = target[:,:self.target_length]
 
         metadata = {
             "Filename" : filename,
@@ -201,13 +220,13 @@ class BallroomDataset(torch.utils.data.Dataset):
                 beat_one_hot = [0,0,0,1]
 
             # convert seconds to samples
-            beat_time_samples = int(float(time_sec) * (self.sample_rate))
+            beat_time_samples = int(float(time_sec) * (self.audio_sample_rate))
 
             beat_samples.append(beat_time_samples)
             beat_indices.append(beat)
 
             if beat == 1:
-                downbeat_time_samples = int(float(time_sec) * (self.sample_rate))
+                downbeat_time_samples = int(float(time_sec) * (self.audio_sample_rate))
                 downbeat_samples.append(downbeat_time_samples)
 
         # guess at the time signature
@@ -241,31 +260,38 @@ class BallroomDataset(torch.utils.data.Dataset):
             audio[:,start:stop] = 0
             target[:,start:stop] = 0
 
-        # shift targets forward/back max 10ms
-        if np.random.rand() < 0.75:      
-            
+        if np.random.rand() < 0.33:
             # this is the old method (shift all beats)
-            #max_shift = int(0.070 * self.sample_rate)
-            #shift = np.random.randint(0, high=max_shift)
-            #direction = np.random.choice([-1,1])
-            #target = torch.roll(target, shift * direction)
+            max_shift = int(0.070 * self.target_sample_rate)
+            shift = np.random.randint(0, high=max_shift)
+            direction = np.random.choice([-1,1])
+            target = torch.roll(target, shift * direction)
 
+        # shift targets forward/back max 70ms
+        if np.random.rand() < 0.0:      
+            
             # in this method we shift each beat and downbeat by a random amount
-            max_shift = int(0.070 * self.sample_rate)
+            max_shift = int(0.070 * self.target_sample_rate)
 
-            beat_ind = (target[0,:] == 1).nonzero(as_tuple=False)
-            beat_shifts = ((torch.rand(beat_ind.shape[-1]) * 2) - 1) * max_shift
-            beat_ind += beat_shifts.long()
-            beat_ind = beat_ind[beat_ind < target.shape[-1]]
-
+            beat_ind = torch.logical_and(target[0,:] == 1, target[1,:] != 1).nonzero(as_tuple=False) # all beats EXCEPT downbeats
             dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
-            dbeat_shifts = ((torch.rand(dbeat_ind.shape[-1]) * 2) - 1) * max_shift
+
+            # shift just the downbeats
+            dbeat_shifts = torch.normal(0.0, max_shift/2, size=(1,dbeat_ind.shape[-1]))
             dbeat_ind += dbeat_shifts.long()
-            dbeat_ind = dbeat_ind[dbeat_ind < target.shape[-1]]  # ensure we have no beats beyond max index
+
+            # now shift the non-downbeats 
+            beat_shifts = torch.normal(0.0, max_shift/2, size=(1,beat_ind.shape[-1]))
+            beat_ind += beat_shifts.long()
+
+            # ensure we have no beats beyond max index
+            beat_ind = beat_ind[beat_ind < target.shape[-1]]
+            dbeat_ind = dbeat_ind[dbeat_ind < target.shape[-1]]  
 
             # now convert indices back to target vector
             shifted_target = torch.zeros(2,target.shape[-1])
             shifted_target[0,beat_ind] = 1
+            shifted_target[0,dbeat_ind] = 1 # set also downbeats on first channel
             shifted_target[1,dbeat_ind] = 1
 
             target = shifted_target
@@ -282,11 +308,11 @@ class BallroomDataset(torch.utils.data.Dataset):
         # apply pitch shifting
         if np.random.rand() < 0.5:
             sgn = np.random.choice([-1,1])
-            factor = sgn * np.random.rand() * 12.0     
+            factor = sgn * np.random.rand() * 8.0     
             tfm = sox.Transformer()        
             tfm.pitch(factor)
             audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
-                                    sample_rate_in=self.sample_rate)
+                                    sample_rate_in=self.audio_sample_rate)
             audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
 
         # apply a lowpass filter
@@ -295,7 +321,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             sos = scipy.signal.butter(2, 
                                       cutoff, 
                                       btype="lowpass", 
-                                      fs=self.sample_rate, 
+                                      fs=self.audio_sample_rate, 
                                       output='sos')
             audio_filtered = scipy.signal.sosfilt(sos, audio.numpy())
             audio = torch.from_numpy(audio_filtered.astype('float32'))
@@ -306,7 +332,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             sos = scipy.signal.butter(2, 
                                       cutoff, 
                                       btype="highpass", 
-                                      fs=self.sample_rate, 
+                                      fs=self.audio_sample_rate, 
                                       output='sos')
             audio_filtered = scipy.signal.sosfilt(sos, audio.numpy())
             audio = torch.from_numpy(audio_filtered.astype('float32'))
@@ -321,5 +347,8 @@ class BallroomDataset(torch.utils.data.Dataset):
         if np.random.rand() < 0.2:   
             g = 10**((np.random.rand() * 12)/20)   
             audio = torch.tanh(audio)    
+        
+        # normalize the audio
+        audio /= audio.float().abs().max()
 
         return audio, target

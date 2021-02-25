@@ -24,7 +24,7 @@ def find_beats(t, p,
     elif filter_type == "cheby":
         sos = scipy.signal.cheby1(10,
                                   1, 
-                                  100, 
+                                  45, 
                                   btype='lowpass', 
                                   fs=sample_rate,
                                   output='sos')
