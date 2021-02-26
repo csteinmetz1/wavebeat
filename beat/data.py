@@ -13,10 +13,6 @@ torchaudio.set_audio_backend("sox_io")
 
 class BallroomDataset(torch.utils.data.Dataset):
     """ Ballroom Dataset. 
-
-        Audio: [http://mtg.upf.edu/ismir2004/contest/tempoContest/node5.html](http://mtg.upf.edu/ismir2004/contest/tempoContest/node5.html)
-
-        Annotations: [https://github.com/CPJKU/BallroomAnnotations](https://github.com/CPJKU/BallroomAnnotations)
     
     """
     def __init__(self, 
@@ -40,7 +36,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             audio_sample_rate (float, optional): Sample rate of the audio files. (Default: 44100)
             target_factor (float, optional): Sample rate of the audio files. (Default: 256)
             subset (str, optional): Pull data either from "train", "val", "test", or "full" subsets. (Default: "train")
-            dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc". (Default: "ballroom")
+            dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc_popular". (Default: "ballroom")
             length (int, optional): Number of samples in the returned examples. (Default: 40)
             preload (bool, optional): Read in all data into RAM during init. (Default: False)
             half (bool, optional): Store the float32 audio as float16. (Default: True)
@@ -70,10 +66,12 @@ class BallroomDataset(torch.utils.data.Dataset):
         print(f"Target length: {self.target_length}")
 
         # first get all of the audio files
-        if self.dataset == "beatles":
+        if self.dataset in ["beatles", "rwc_popular"]:
             file_ext = "*L+R.wav"
-        elif self.dataset == "ballroom":
+        elif self.dataset in ["ballroom", "hainsworth"]:
             file_ext = "*.wav"
+        else:
+            raise ValueError(f"Invalid dataset: {self.dataset}")
 
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", file_ext))
         #self.audio_files.sort() # sort the list of audio files
@@ -90,7 +88,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             stop = -1
         elif self.subset == "full":
             start = 0
-            stop = -1
+            stop = None
 
         # select one file for the dry run
         if self.dry_run: 
@@ -104,21 +102,27 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.annot_files = []
         for audio_file in self.audio_files:
             # find the corresponding annot file
-            if self.dataset == "beatles":
+            if self.dataset in ["rwc_popular", "beatles"]:
                 replace = "_L+R.wav"
-            else:
+            elif self.dataset in ["ballroom", "hainsworth"]:
                 replace = ".wav"
+
             filename = os.path.basename(audio_file).replace(replace, "")
 
             if self.dataset == "ballroom":
                 self.annot_files.append(os.path.join(self.annot_dir, f"{filename}.beats"))
+            elif self.dataset == "hainsworth":
+                genre_dir = os.path.basename(os.path.dirname(audio_file))
+                self.annot_files.append(os.path.join(self.annot_dir, genre_dir, f"{filename}.txt"))
             elif self.dataset == "beatles":
                 album_dir = os.path.basename(os.path.dirname(audio_file))
                 annot_file = os.path.join(self.annot_dir, album_dir, f"{filename}.txt")
                 self.annot_files.append(annot_file)
-                if "!" in annot_file:
-                    print(annot_file)
-        
+            elif self.dataset == "rwc_popular":
+                album_dir = os.path.basename(os.path.dirname(audio_file))
+                annot_file = os.path.join(self.annot_dir, album_dir, f"{filename}.BEAT.TXT")
+                self.annot_files.append(annot_file)
+
         for audio, annot in zip(self.audio_files, self.annot_files):
             self.load_annot(annot)
 
@@ -239,10 +243,16 @@ class BallroomDataset(torch.utils.data.Dataset):
                 line = line.strip('\n')
                 line = line.replace('\t', ' ')
                 line = line.replace('  ', ' ')
-
-                #print(f"'{line}'")
-                #print(filename)
                 time_sec, beat = line.split(' ')
+            elif self.dataset == "hainsworth":
+                line = line.strip('\n')
+                time_sec, beat = line.split(' ')
+            elif self.dataset == "rwc_popular":
+                line = line.strip('\n')
+                line = line.split('\t')
+
+                time_sec = int(line[0]) / 100.0
+                beat = 1 if int(line[2]) == 384 else 2
 
             # convert beat to one-hot
             beat = int(beat)

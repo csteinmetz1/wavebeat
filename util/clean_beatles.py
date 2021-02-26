@@ -11,6 +11,9 @@ annot_dir = ""
 #--audio_dir /home/cjstein/datasets/The_Beatles \
 #--annot_dir /home/cjstein/datasets/The_Beatles_Annotations/beat/The_Beatles \
 
+#--audio_dir /home/cjstein/datasets/hainsworth/beat \
+#--annot_dir /home/cjstein/datasets/hainsworth/wavs \
+
 audio_files = glob.glob(os.path.join(audio_dir, "**", "*.wav"))
 annot_files = glob.glob(os.path.join(annot_dir, "**", "*.txt"))
 
