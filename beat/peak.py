@@ -7,7 +7,7 @@ def find_beats(t, p,
                 distance=None, 
                 sample_rate=44100, 
                 beat_type="beat",
-                filter_type="cheby",
+                filter_type="none",
                 peak_type="simple"):
     # 15, 2
 

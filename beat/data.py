@@ -23,7 +23,8 @@ class BallroomDataset(torch.utils.data.Dataset):
                  audio_dir, 
                  annot_dir, 
                  audio_sample_rate=44100, 
-                 target_factor=220,
+                 target_factor=256,
+                 dataset="ballroom",
                  subset="train", 
                  length=16384, 
                  preload=False, 
@@ -36,8 +37,10 @@ class BallroomDataset(torch.utils.data.Dataset):
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
             annot_dir (str): Path to the root directory containing the annotation (.beats) files.
-            sample_rate (int, optional): Sample rate of the audio files. (Default: 44100)
+            audio_sample_rate (float, optional): Sample rate of the audio files. (Default: 44100)
+            target_factor (float, optional): Sample rate of the audio files. (Default: 256)
             subset (str, optional): Pull data either from "train", "val", "test", or "full" subsets. (Default: "train")
+            dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc". (Default: "ballroom")
             length (int, optional): Number of samples in the returned examples. (Default: 40)
             preload (bool, optional): Read in all data into RAM during init. (Default: False)
             half (bool, optional): Store the float32 audio as float16. (Default: True)
@@ -52,6 +55,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.target_factor = target_factor
         self.target_sample_rate = audio_sample_rate / target_factor
         self.subset = subset
+        self.dataset = dataset
         self.length = length
         self.preload = preload
         self.half = half
@@ -59,13 +63,19 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.augment = augment
         self.dry_run = dry_run
         self.pad_mode = pad_mode
+        self.dataset = dataset
 
         self.target_length = int(self.length / self.target_factor)
         print(f"Audio length: {self.length}")
         print(f"Target length: {self.target_length}")
 
         # first get all of the audio files
-        self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", "*.wav"))
+        if self.dataset == "beatles":
+            file_ext = "*L+R.wav"
+        elif self.dataset == "ballroom":
+            file_ext = "*.wav"
+
+        self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", file_ext))
         #self.audio_files.sort() # sort the list of audio files
         random.shuffle(self.audio_files)
 
@@ -94,8 +104,20 @@ class BallroomDataset(torch.utils.data.Dataset):
         self.annot_files = []
         for audio_file in self.audio_files:
             # find the corresponding annot file
-            filename = os.path.basename(audio_file).replace(".wav", "")
-            self.annot_files.append(os.path.join(self.annot_dir, f"{filename}.beats"))
+            if self.dataset == "beatles":
+                replace = "_L+R.wav"
+            else:
+                replace = ".wav"
+            filename = os.path.basename(audio_file).replace(replace, "")
+
+            if self.dataset == "ballroom":
+                self.annot_files.append(os.path.join(self.annot_dir, f"{filename}.beats"))
+            elif self.dataset == "beatles":
+                album_dir = os.path.basename(os.path.dirname(audio_file))
+                annot_file = os.path.join(self.annot_dir, album_dir, f"{filename}.txt")
+                self.annot_files.append(annot_file)
+                if "!" in annot_file:
+                    print(annot_file)
         
         for audio, annot in zip(self.audio_files, self.annot_files):
             self.load_annot(annot)
@@ -111,6 +133,7 @@ class BallroomDataset(torch.utils.data.Dataset):
 
         # first load the audio file
         audio, sr = torchaudio.load(filename)
+        audio = audio.float()
 
         # resample if needed
         if sr != self.audio_sample_rate:
@@ -185,7 +208,11 @@ class BallroomDataset(torch.utils.data.Dataset):
             "Time signature" : time_signature
         }
 
-        if self.subset == "train":
+        if self.half:
+            audio = audio.half()
+            target = target.half()
+
+        if self.subset in ["train", "full"]:
             return audio, target
         elif self.subset in ["val", "test"]:
             # this will only work with batch size = 1
@@ -204,9 +231,18 @@ class BallroomDataset(torch.utils.data.Dataset):
         time_signature = None # estimated time signature (only 3/4 or 4/4)
 
         for line in lines:
-            line = line.strip('\n')
-            line = line.replace('\t', ' ')
-            time_sec, beat = line.split(' ')
+            if self.dataset == "ballroom":
+                line = line.strip('\n')
+                line = line.replace('\t', ' ')
+                time_sec, beat = line.split(' ')
+            elif self.dataset == "beatles":
+                line = line.strip('\n')
+                line = line.replace('\t', ' ')
+                line = line.replace('  ', ' ')
+
+                #print(f"'{line}'")
+                #print(filename)
+                time_sec, beat = line.split(' ')
 
             # convert beat to one-hot
             beat = int(beat)
@@ -260,7 +296,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             audio[:,start:stop] = 0
             target[:,start:stop] = 0
 
-        if np.random.rand() < 0.33:
+        if np.random.rand() < 0.0:
             # this is the old method (shift all beats)
             max_shift = int(0.070 * self.target_sample_rate)
             shift = np.random.randint(0, high=max_shift)
@@ -268,10 +304,10 @@ class BallroomDataset(torch.utils.data.Dataset):
             target = torch.roll(target, shift * direction)
 
         # shift targets forward/back max 70ms
-        if np.random.rand() < 0.0:      
+        if np.random.rand() < 0.8:      
             
             # in this method we shift each beat and downbeat by a random amount
-            max_shift = int(0.070 * self.target_sample_rate)
+            max_shift = int(0.050 * self.target_sample_rate)
 
             beat_ind = torch.logical_and(target[0,:] == 1, target[1,:] != 1).nonzero(as_tuple=False) # all beats EXCEPT downbeats
             dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)

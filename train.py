@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from beat.tcn import TCNModel
+from beat.dstcn import dsTCNModel
 from beat.lstm import LSTMModel
 from beat.waveunet import WaveUNetModel
 from beat.data import BallroomDataset
@@ -16,12 +17,13 @@ torch.backends.cudnn.benchmark = True
 parser = ArgumentParser()
 
 # add PROGRAM level args
-parser.add_argument('--model_type', type=str, default='tcn', help='tcn, lstm, or waveunet')
+parser.add_argument('--model_type', type=str, default='tcn', help='tcn, lstm, waveunet, or dstcn')
+parser.add_argument('--dataset', type=str, default='ballroom')
 parser.add_argument('--audio_dir', type=str, default='./data')
 parser.add_argument('--annot_dir', type=str, default='./data')
 parser.add_argument('--preload', action="store_true")
 parser.add_argument('--audio_sample_rate', type=int, default=44100)
-parser.add_argument('--target_factor', type=int, default=220)
+parser.add_argument('--target_factor', type=int, default=256)
 parser.add_argument('--shuffle', type=bool, default=True)
 parser.add_argument('--train_subset', type=str, default='train')
 parser.add_argument('--val_subset', type=str, default='val')
@@ -46,6 +48,8 @@ elif temp_args.model_type == 'lstm':
     parser = LSTMModel.add_model_specific_args(parser)
 elif temp_args.model_type == 'waveunet':
     parser = WaveUNetModel.add_model_specific_args(parser)
+elif temp_args.model_type == 'dstcn':
+    parser = dsTCNModel.add_model_specific_args(parser)
 
 # parse them args
 args = parser.parse_args()
@@ -59,6 +63,7 @@ trainer = pl.Trainer.from_argparse_args(args)
 # setup the dataloaders
 train_dataset = BallroomDataset(args.audio_dir,
                                 args.annot_dir,
+                                dataset=args.dataset,
                                 audio_sample_rate=args.audio_sample_rate,
                                 target_factor=args.target_factor,
                                 subset=args.train_subset,
@@ -77,6 +82,7 @@ train_dataloader = torch.utils.data.DataLoader(train_dataset,
 
 val_dataset = BallroomDataset(args.audio_dir,
                             args.annot_dir,
+                            dataset=args.dataset,
                             audio_sample_rate=args.audio_sample_rate,
                             target_factor=args.target_factor,
                             subset=args.val_subset if not args.dry_run else args.train_subset,
@@ -105,6 +111,8 @@ elif args.model_type == 'lstm':
     model = LSTMModel(**dict_args)
 elif args.model_type == 'waveunet':
     model = WaveUNetModel(**dict_args)
+elif args.model_type == 'dstcn':
+    model = dsTCNModel(**dict_args)
 
 # summary 
 torchsummary.summary(model, [(1,args.train_length)], device="cpu")
