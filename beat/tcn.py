@@ -105,6 +105,7 @@ class TCNModel(Base):
             noutputs (int): Number of output channels (mono = 1, stereo 2). Default: 1
             nblocks (int): Number of total TCN blocks. Default: 10
             kernel_size (int): Width of the convolutional kernels. Default: 3
+            stride (int): Stide size when applying convolutional filter. Default: 1 
             dialation_growth (int): Compute the dilation factor at each block as dilation_growth ** (n % stack_size). Default: 1
             channel_growth (int): Compute the output channels at each black as in_ch * channel_growth. Default: 2
             channel_width (int): When channel_growth = 1 all blocks use convolutions with this many channels. Default: 64
@@ -192,6 +193,7 @@ class TCNModel(Base):
         parser.add_argument('--noutputs', type=int, default=2)
         parser.add_argument('--nblocks', type=int, default=4)
         parser.add_argument('--kernel_size', type=int, default=5)
+        parser.add_argument('--stride', type=int, default=1)
         parser.add_argument('--dilation_growth', type=int, default=10)
         parser.add_argument('--channel_growth', type=int, default=1)
         parser.add_argument('--channel_width', type=int, default=32)

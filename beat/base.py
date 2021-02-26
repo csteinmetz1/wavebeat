@@ -111,6 +111,9 @@ class Base(pl.LightningModule):
         #self.log('val_loss/Beat', pos)
         #self.log('val_loss/No Beat', neg)
 
+        # apply sigmoid after computing loss
+        pred = torch.sigmoid(pred)
+
         # move tensors to cpu for logging
         outputs = {
             "input" : input_crop.cpu().numpy(),

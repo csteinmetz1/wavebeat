@@ -37,25 +37,25 @@ class GlobalBCELoss(torch.nn.Module):
         target_beats = beat_act_target[beat_act_target == 1]
         input_beats =  beat_act_input[beat_act_target == 1]
 
-        beat_loss = torch.nn.functional.binary_cross_entropy(input_beats, target_beats)
+        beat_loss = torch.nn.functional.binary_cross_entropy_with_logits(input_beats, target_beats)
 
         # no beat errors
         target_no_beats = beat_act_target[beat_act_target == 0]
         input_no_beats = beat_act_input[beat_act_target == 0]
 
-        no_beat_loss = torch.nn.functional.binary_cross_entropy(input_no_beats, target_no_beats)
+        no_beat_loss = torch.nn.functional.binary_cross_entropy_with_logits(input_no_beats, target_no_beats)
 
         # downbeat errors
         target_downbeats = downbeat_act_target[downbeat_act_target == 1]
         input_downbeats = downbeat_act_input[downbeat_act_target == 1]
 
-        downbeat_loss = torch.nn.functional.binary_cross_entropy(input_downbeats, target_downbeats)
+        downbeat_loss = torch.nn.functional.binary_cross_entropy_with_logits(input_downbeats, target_downbeats)
 
         # no downbeat errors
         target_no_downbeats = downbeat_act_target[downbeat_act_target == 0]
         input_no_downbeats = downbeat_act_input[downbeat_act_target == 0]
 
-        no_downbeat_loss = torch.nn.functional.binary_cross_entropy(input_no_downbeats, target_no_downbeats)
+        no_downbeat_loss = torch.nn.functional.binary_cross_entropy_with_logits(input_no_downbeats, target_no_downbeats)
 
         # sum up losses
         total_loss = beat_loss + no_beat_loss + downbeat_loss + no_downbeat_loss
