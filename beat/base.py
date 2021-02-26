@@ -313,7 +313,9 @@ class Base(pl.LightningModule):
     @torch.jit.unused
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=20, verbose=True)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+                                                                  patience=self.hparams.patience, 
+                                                                  verbose=True)
         return {
             'optimizer': optimizer,
             'lr_scheduler': lr_scheduler,
