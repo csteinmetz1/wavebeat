@@ -11,10 +11,8 @@ import soxbindings as sox
 
 torchaudio.set_audio_backend("sox_io")
 
-class BallroomDataset(torch.utils.data.Dataset):
-    """ Ballroom Dataset. 
-    
-    """
+class DownbeatDataset(torch.utils.data.Dataset):
+    """ Downbeat Dataset. """
     def __init__(self, 
                  audio_dir, 
                  annot_dir, 
@@ -35,7 +33,7 @@ class BallroomDataset(torch.utils.data.Dataset):
             annot_dir (str): Path to the root directory containing the annotation (.beats) files.
             audio_sample_rate (float, optional): Sample rate of the audio files. (Default: 44100)
             target_factor (float, optional): Sample rate of the audio files. (Default: 256)
-            subset (str, optional): Pull data either from "train", "val", "test", or "full" subsets. (Default: "train")
+            subset (str, optional): Pull data either from "train", "val", "test", or "full-train", "full-val" subsets. (Default: "train")
             dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc_popular". (Default: "ballroom")
             length (int, optional): Number of samples in the returned examples. (Default: 40)
             preload (bool, optional): Read in all data into RAM during init. (Default: False)
@@ -86,7 +84,7 @@ class BallroomDataset(torch.utils.data.Dataset):
         elif self.subset == "test":
             start = int(len(self.audio_files) * 0.9)
             stop = -1
-        elif self.subset == "full":
+        elif self.subset in ["full-train", "full-val"]:
             start = 0
             stop = None
 
@@ -216,9 +214,9 @@ class BallroomDataset(torch.utils.data.Dataset):
             audio = audio.half()
             target = target.half()
 
-        if self.subset in ["train", "full"]:
+        if self.subset in ["train", "full-train"]:
             return audio, target
-        elif self.subset in ["val", "test"]:
+        elif self.subset in ["val", "test", "full-val"]:
             # this will only work with batch size = 1
             return audio, target, metadata
         else:
