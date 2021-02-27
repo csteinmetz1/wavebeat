@@ -62,108 +62,93 @@ args = parser.parse_args()
 
 datasets = ["beatles", "ballroom", "hainsworth", "rwc_popular"]
 
-for val_set in datasets:
+# set the seed
+pl.seed_everything(42)
 
-    train_sets = [d for d in datasets if d != val_set]
+#
+args.default_root_dir = os.path.join("lightning_logs", "full")
+print(args.default_root_dir)
 
-    print(f"Training with {train_sets[0]}, {train_sets[1]}, and {train_sets[2]}.")
-    print(f"Validating with {val_set}.")
+# create the trainer
+trainer = pl.Trainer.from_argparse_args(args)
 
-    # set the seed
-    pl.seed_everything(42)
+# setup the dataloaders
+train_datasets = []
+val_datasets = []
 
-    #
-    args.default_root_dir = os.path.join("lightning_logs", "cv", val_set)
-    print(args.default_root_dir)
-
-    # create the trainer
-    trainer = pl.Trainer.from_argparse_args(args)
-
-    # setup the dataloaders
-    train_datasets = []
-    for train_set in train_sets:
-        if train_set == "beatles":
-            audio_dir = args.beatles_audio_dir
-            annot_dir = args.beatles_annot_dir
-        elif train_set == "ballroom":
-            audio_dir = args.ballroom_audio_dir
-            annot_dir = args.ballroom_annot_dir
-        elif train_set == "hainsworth":
-            audio_dir = args.hainsworth_audio_dir
-            annot_dir = args.hainsworth_annot_dir
-        elif train_set == "rwc_popular":
-            audio_dir = args.rwc_popular_audio_dir
-            annot_dir = args.rwc_popular_annot_dir
-
-        train_dataset = DownbeatDataset(audio_dir,
-                                        annot_dir,
-                                        dataset=train_set,
-                                        audio_sample_rate=args.audio_sample_rate,
-                                        target_factor=args.target_factor,
-                                        subset="full-train",
-                                        fraction=args.train_fraction,
-                                        augment=args.augment,
-                                        half=True if args.precision == 16 else False,
-                                        preload=args.preload,
-                                        length=args.train_length,
-                                        dry_run=args.dry_run)
-        train_datasets.append(train_dataset)
-
-    train_dataset_list = torch.utils.data.ConcatDataset(train_datasets)
-    train_dataloader = torch.utils.data.DataLoader(train_dataset_list, 
-                                                   shuffle=args.shuffle,
-                                                   batch_size=args.batch_size,
-                                                   num_workers=args.num_workers,
-                                                   pin_memory=True)
-    if val_set == "beatles":
+for dataset in datasets:
+    if dataset == "beatles":
         audio_dir = args.beatles_audio_dir
         annot_dir = args.beatles_annot_dir
-    elif val_set == "ballroom":
+    elif dataset == "ballroom":
         audio_dir = args.ballroom_audio_dir
         annot_dir = args.ballroom_annot_dir
-    elif val_set == "hainsworth":
+    elif dataset == "hainsworth":
         audio_dir = args.hainsworth_audio_dir
         annot_dir = args.hainsworth_annot_dir
-    elif val_set == "rwc_popular":
+    elif dataset == "rwc_popular":
         audio_dir = args.rwc_popular_audio_dir
         annot_dir = args.rwc_popular_annot_dir
 
+    train_dataset = DownbeatDataset(audio_dir,
+                                    annot_dir,
+                                    dataset=dataset,
+                                    audio_sample_rate=args.audio_sample_rate,
+                                    target_factor=args.target_factor,
+                                    subset="train",
+                                    fraction=args.train_fraction,
+                                    augment=args.augment,
+                                    half=True if args.precision == 16 else False,
+                                    preload=args.preload,
+                                    length=args.train_length,
+                                    dry_run=args.dry_run)
+    train_datasets.append(train_dataset)
+
     val_dataset = DownbeatDataset(audio_dir,
-                                annot_dir,
-                                dataset=val_set,
-                                audio_sample_rate=args.audio_sample_rate,
-                                target_factor=args.target_factor,
-                                subset="full-val",
-                                augment=False,
-                                half=True if args.precision == 16 else False,
-                                preload=args.preload,
-                                length=args.eval_length,
-                                dry_run=args.dry_run)
+                                 annot_dir,
+                                 dataset=dataset,
+                                 audio_sample_rate=args.audio_sample_rate,
+                                 target_factor=args.target_factor,
+                                 subset="val",
+                                 augment=False,
+                                 half=True if args.precision == 16 else False,
+                                 preload=args.preload,
+                                 length=args.eval_length,
+                                 dry_run=args.dry_run)
+    val_datasets.append(val_dataset)
 
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, 
+train_dataset_list = torch.utils.data.ConcatDataset(train_datasets)
+val_dataset_list = torch.utils.data.ConcatDataset(val_datasets)
+
+train_dataloader = torch.utils.data.DataLoader(train_dataset_list, 
                                                 shuffle=args.shuffle,
-                                                batch_size=4,
+                                                batch_size=args.batch_size,
                                                 num_workers=args.num_workers,
-                                                pin_memory=False)
+                                                pin_memory=True)
+val_dataloader = torch.utils.data.DataLoader(val_dataset_list, 
+                                            shuffle=args.shuffle,
+                                            batch_size=4,
+                                            num_workers=args.num_workers,
+                                            pin_memory=False)    
 
-    # create the model with args
-    dict_args = vars(args)
-    dict_args["nparams"] = 2
-    dict_args["target_sample_rate"] = args.audio_sample_rate / args.target_factor
+# create the model with args
+dict_args = vars(args)
+dict_args["nparams"] = 2
+dict_args["target_sample_rate"] = args.audio_sample_rate / args.target_factor
 
-    if args.model_type == 'tcn':
-        model = TCNModel(**dict_args)
-        rf = model.compute_receptive_field()
-        print(f"Model has receptive field of {(rf/args.sample_rate)*1e3:0.1f} ms ({rf}) samples")
-    elif args.model_type == 'lstm':
-        model = LSTMModel(**dict_args)
-    elif args.model_type == 'waveunet':
-        model = WaveUNetModel(**dict_args)
-    elif args.model_type == 'dstcn':
-        model = dsTCNModel(**dict_args)
+if args.model_type == 'tcn':
+    model = TCNModel(**dict_args)
+    rf = model.compute_receptive_field()
+    print(f"Model has receptive field of {(rf/args.sample_rate)*1e3:0.1f} ms ({rf}) samples")
+elif args.model_type == 'lstm':
+    model = LSTMModel(**dict_args)
+elif args.model_type == 'waveunet':
+    model = WaveUNetModel(**dict_args)
+elif args.model_type == 'dstcn':
+    model = dsTCNModel(**dict_args)
 
-    # summary 
-    torchsummary.summary(model, [(1,args.train_length)], device="cpu")
+# summary 
+torchsummary.summary(model, [(1,args.train_length)], device="cpu")
 
-    # train!
-    trainer.fit(model, train_dataloader, val_dataloader)
+# train!
+trainer.fit(model, train_dataloader, val_dataloader)
