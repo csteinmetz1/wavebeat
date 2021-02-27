@@ -304,6 +304,40 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio[:,start:stop] = 0
             target[:,start:stop] = 0
 
+        # apply time stretching
+        if np.random.rand() < 0.3:
+            factor = np.random.normal(1.0, 0.5)  
+            factor = np.clip(factor, a_min=0.6, a_max=1.8)
+
+            tfm = sox.Transformer()        
+
+            if abs(factor - 1.0) <= 0.1: # use stretch
+                tfm.stretch(factor)
+            else:   # use tempo
+                tfm.tempo(factor, 'm')
+
+            audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
+                                    sample_rate_in=self.audio_sample_rate)
+            audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
+
+            # now we update the targets based on new tempo
+            dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
+            dbeat_sec = dbeat_ind / self.target_sample_rate
+            new_dbeat_sec = dbeat_sec * factor
+            new_dbeat_ind = (new_dbeat_sec * self.target_sample_rate).long()
+
+            beat_ind = (target[0,:] == 1).nonzero(as_tuple=False)
+            beat_sec = beat_ind / self.target_sample_rate
+            new_beat_sec = beat_sec * factor
+            new_beat_ind = (new_beat_sec * self.target_sample_rate).long()
+
+            # now convert indices back to target vector
+            new_size = int(np.ceil(target.shape[-1]*factor))
+            streteched_target = torch.zeros(2,new_size)
+            streteched_target[0,new_beat_ind] = 1
+            streteched_target[1,new_dbeat_ind] = 1
+            target = streteched_target
+
         if np.random.rand() < 0.0:
             # this is the old method (shift all beats)
             max_shift = int(0.070 * self.target_sample_rate)
@@ -315,7 +349,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         if np.random.rand() < 0.8:      
             
             # in this method we shift each beat and downbeat by a random amount
-            max_shift = int(0.050 * self.target_sample_rate)
+            max_shift = int(0.070 * self.target_sample_rate)
 
             beat_ind = torch.logical_and(target[0,:] == 1, target[1,:] != 1).nonzero(as_tuple=False) # all beats EXCEPT downbeats
             dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
@@ -339,15 +373,6 @@ class DownbeatDataset(torch.utils.data.Dataset):
             shifted_target[1,dbeat_ind] = 1
 
             target = shifted_target
-
-        # apply time stretching
-        #if np.random.rand() < 0.0:
-        #    sgn = np.random.choice([-1,1])
-        #    factor = sng * np.random.rand() * 0.2     
-        #    tfm = sox.Transformer()        
-        #    tfm.tempo(factor, 'm')
-        #    audio = tfm.build_array(input_array=audio, 
-        #                            sample_rate_in=self.sample_rate)
     
         # apply pitch shifting
         if np.random.rand() < 0.5:
