@@ -7,6 +7,7 @@ import random
 import torchaudio
 import numpy as np
 import scipy.signal
+from tqdm import tqdm
 import soxbindings as sox 
 
 torchaudio.set_audio_backend("sox_io")
@@ -60,8 +61,8 @@ class DownbeatDataset(torch.utils.data.Dataset):
         self.dataset = dataset
 
         self.target_length = int(self.length / self.target_factor)
-        print(f"Audio length: {self.length}")
-        print(f"Target length: {self.target_length}")
+        #print(f"Audio length: {self.length}")
+        #print(f"Target length: {self.target_length}")
 
         # first get all of the audio files
         if self.dataset in ["beatles", "rwc_popular"]:
@@ -95,7 +96,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         else:
             # now pick out subset of audio files
             self.audio_files = self.audio_files[start:stop]
-            print(f"Selected {len(self.audio_files)} files for {self.subset} set.")
+            print(f"Selected {len(self.audio_files)} files for {self.subset} set from {self.dataset} dataset.")
 
         self.annot_files = []
         for audio_file in self.audio_files:
@@ -121,42 +122,101 @@ class DownbeatDataset(torch.utils.data.Dataset):
                 annot_file = os.path.join(self.annot_dir, album_dir, f"{filename}.BEAT.TXT")
                 self.annot_files.append(annot_file)
 
-        for audio, annot in zip(self.audio_files, self.annot_files):
-            self.load_annot(annot)
+        self.data = [] # when preloading store audio data and metadata
+        if self.preload:
+            for audio_filename, annot_filename in tqdm(zip(self.audio_files, self.annot_files), 
+                                                        total=len(self.audio_files), 
+                                                        ncols=80):
+                    audio, target, metadata = self.load_data(audio_filename, annot_filename)
+                    if self.half:
+                        audio = audio.half()
+                        target = target.half()
+                    self.data.append((audio, target, metadata))
 
     def __len__(self):
         return len(self.audio_files)
 
     def __getitem__(self, idx):
 
-        # get metadata of example
-        filename = self.audio_files[idx]
-        genre = os.path.basename(os.path.dirname(filename))
+        if self.preload:
+            audio, target, metadata = self.data[idx]
+        else:
+            # get metadata of example
+            audio_filename = self.audio_files[idx]
+            annot_filename = self.annot_files[idx]
+            audio, target, metadata = self.load_data(audio_filename, annot_filename)
 
+        # do all processing in float32 not float16
+        audio = audio.float()
+        target = target.float()
+
+        # apply augmentations 
+        if self.augment: 
+            audio, target = self.apply_augmentations(audio, target)
+
+        N_audio = audio.shape[-1]   # audio samples
+        N_target = target.shape[-1] # target samples
+
+        # random crop of the audio and target if larger than desired
+        if N_audio > self.length:
+            audio_start = np.random.randint(0, N_audio - self.length - 1)
+            audio_stop  = audio_start + self.length
+            target_start = int(audio_start / self.target_factor)
+            target_stop = int(audio_stop / self.target_factor)
+            audio = audio[:,audio_start:audio_stop]
+            target = target[:,target_start:target_stop]
+            #print(f"crop: {audio.shape} {target.shape}")
+
+        else: # pad the audio and target is shorter than desired
+            pad_size = self.length - N_audio
+            #print(f"audio pad: {pad_size}")
+            padl = pad_size - (pad_size // 2)
+            padr = pad_size // 2
+            audio = torch.nn.functional.pad(audio, 
+                                            (padl, padr), 
+                                            mode=self.pad_mode)
+            pad_size = self.target_length - N_target
+            #print(f"target pad: {pad_size}")
+            padl = pad_size - (pad_size // 2)
+            padr = pad_size // 2
+            target = torch.nn.functional.pad(target, 
+                                             (padl, padr), 
+                                             mode=self.pad_mode)
+            #print(f"crop: {audio.shape} {target.shape}")
+            
+        if self.subset in ["train", "full-train"]:
+            return audio, target
+        elif self.subset in ["val", "test", "full-val"]:
+            # this will only work with batch size = 1
+            return audio, target, metadata
+        else:
+            raise RuntimeError(f"Invalid subset: `{self.subset}`")
+
+    def load_data(self, audio_filename, annot_filename):
         # first load the audio file
-        audio, sr = torchaudio.load(filename)
+        audio, sr = torchaudio.load(audio_filename)
         audio = audio.float()
 
         # resample if needed
         if sr != self.audio_sample_rate:
             audio = julius.resample_frac(audio, sr, self.audio_sample_rate)   
-        
-        # normalize all inputs -1 to 1
+
+        # normalize all audio inputs -1 to 1
         audio /= audio.abs().max()
 
         # now get the annotation information
-        annot = self.load_annot(self.annot_files[idx])
+        annot = self.load_annot(annot_filename)
         beat_samples, downbeat_samples, beat_indices, time_signature = annot
 
-        # now we construct the target sequence with beat (1) and no beat (0)
-        beat_sample_rate = 100
+        # get metadata
+        genre = os.path.basename(os.path.dirname(audio_filename))
 
         # convert beat_samples to beat_seconds
         beat_sec = np.array(beat_samples) / self.audio_sample_rate
         downbeat_sec = np.array(downbeat_samples) / self.audio_sample_rate
 
         t = audio.shape[-1]/self.audio_sample_rate # audio length in sec
-        N = int(t * self.target_sample_rate) + 1             # target length in samples
+        N = int(t * self.target_sample_rate) + 1   # target length in samples
         target = torch.zeros(2,N)
 
         # now convert from seconds to new sample rate
@@ -166,61 +226,13 @@ class DownbeatDataset(torch.utils.data.Dataset):
         target[0,beat_samples] = 1  # first channel is beats
         target[1,downbeat_samples] = 1  # second channel is downbeats
 
-        # apply augmentations 
-        if self.augment: 
-            audio, target = self.apply_augmentations(audio, target)
-
-        # now we take a random crop of both
-        if (N - self.length - 1) < 0:
-            start = 0
-            stop = self.length
-        else:
-            start = np.random.randint(N - self.length - 1)
-            stop = start + self.length
-
-        audio = audio[:,start:stop]
-        target = target[:,start:stop]
-
-        # check the length and pad if
-        if audio.shape[-1] < self.length:
-            pad_size = self.length - audio.shape[-1]
-            pad_left = pad_size - (pad_size // 2)
-            pad_right = pad_size // 2
-            audio = torch.nn.functional.pad(audio.view(1,1,-1),
-                                           (pad_left,pad_right),
-                                           mode=self.pad_mode)
-            audio = audio.view(1,-1)
-        elif audio.shape[-1] > self.length:
-            audio = audio[:,:self.length]
-
-        if target.shape[-1] < self.target_length:
-            pad_size = self.target_length - target.shape[-1]
-            pad_left = pad_size - (pad_size // 2)
-            pad_right = pad_size // 2
-            target = torch.nn.functional.pad(target.view(1,2,-1),
-                                             (pad_left,pad_right),
-                                             mode=self.pad_mode)
-            target = target.view(2,-1)
-        elif target.shape[-1] > self.target_length:
-            target = target[:,:self.target_length]
-
         metadata = {
-            "Filename" : filename,
+            "Filename" : audio_filename,
             "Genre" : genre,
             "Time signature" : time_signature
         }
 
-        if self.half:
-            audio = audio.half()
-            target = target.half()
-
-        if self.subset in ["train", "full-train"]:
-            return audio, target
-        elif self.subset in ["val", "test", "full-val"]:
-            # this will only work with batch size = 1
-            return audio, target, metadata
-        else:
-            raise RuntimeError(f"Invalid subset: `{self.subset}`")
+        return audio, target, metadata
 
     def load_annot(self, filename):
 
@@ -312,7 +324,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             tfm = sox.Transformer()        
 
             if abs(factor - 1.0) <= 0.1: # use stretch
-                tfm.stretch(factor)
+                tfm.stretch(1/factor)
             else:   # use tempo
                 tfm.tempo(factor, 'm')
 
@@ -323,16 +335,16 @@ class DownbeatDataset(torch.utils.data.Dataset):
             # now we update the targets based on new tempo
             dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
             dbeat_sec = dbeat_ind / self.target_sample_rate
-            new_dbeat_sec = dbeat_sec * factor
+            new_dbeat_sec = (dbeat_sec / factor).squeeze()
             new_dbeat_ind = (new_dbeat_sec * self.target_sample_rate).long()
 
             beat_ind = (target[0,:] == 1).nonzero(as_tuple=False)
             beat_sec = beat_ind / self.target_sample_rate
-            new_beat_sec = beat_sec * factor
+            new_beat_sec = (beat_sec / factor).squeeze()
             new_beat_ind = (new_beat_sec * self.target_sample_rate).long()
 
             # now convert indices back to target vector
-            new_size = int(np.ceil(target.shape[-1]*factor))
+            new_size = int(target.shape[-1] / factor)
             streteched_target = torch.zeros(2,new_size)
             streteched_target[0,new_beat_ind] = 1
             streteched_target[1,new_dbeat_ind] = 1
