@@ -41,7 +41,6 @@ class dsTCNBlock(torch.nn.Module):
         self.norm_type = norm_type
 
         pad_value =  ((kernel_size-1) * dilation) // 2
-        print(pad_value)
 
         self.conv1 = torch.nn.Conv1d(in_ch, 
                                      out_ch, 
@@ -128,9 +127,11 @@ class dsTCNModel(Base):
 
         self.blocks = torch.nn.ModuleList()
         for n in range(nblocks):
-            in_ch = ninputs if n == 0 else out_ch * channel_growth
-            out_ch = channel_width if n == 0 else in_ch * channel_growth
+            in_ch = ninputs if n == 0 else out_ch 
+            out_ch = channel_width if n == 0 else in_ch + channel_growth
             dilation = dilation_growth ** (n % stack_size)
+            print(in_ch, out_ch)
+
             self.blocks.append(dsTCNBlock(
                 in_ch, 
                 out_ch,
