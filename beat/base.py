@@ -242,6 +242,9 @@ class Base(pl.LightningModule):
             i = outputs["input"][rand_idx].squeeze()
             t = outputs["target"][rand_idx].squeeze()
             p = outputs["pred"][rand_idx].squeeze()
+            f = outputs["Filename"][idx]
+            g = outputs["Genre"][idx]
+            s = outputs["Time signature"][idx]
 
             t_beats = t[0,:]
             t_downbeats = t[1,:]
@@ -277,7 +280,7 @@ class Base(pl.LightningModule):
                                                               ref_downbeats=ref_downbeats,
                                                               est_downbeats=est_downbeats,
                                                               est_downbeats_sm=est_downbeat_sm,
-                                                              ),
+                                                              song_name=f),
                                              self.global_step)
 
             if self.hparams.save_dir is not None:

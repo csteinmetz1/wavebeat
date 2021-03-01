@@ -11,7 +11,8 @@ def plot_activations(ref_beats,
                      sample_rate, 
                      ref_downbeats=None, 
                      est_downbeats=None, 
-                     est_downbeats_sm=None):
+                     est_downbeats_sm=None,
+                     song_name=None):
 
     plt.figure(figsize=(12,3))
 
@@ -33,8 +34,11 @@ def plot_activations(ref_beats,
     if len(ref_beats) > 0:
         plt.xlim([ref_beats[0], ref_beats[-1]])
 
+    if song_name is not None:
+        plt.title(f"{song_name}")
     plt.xlabel("Time (s)")
     plt.yticks([0.25, 0.75, 1.25, 1.75], ['Beat', 'Downbeat', 'Pred.', 'Target'])
+    plt.tight_layout()
 
     buf = io.BytesIO()
     plt.savefig(buf, format='jpeg')
