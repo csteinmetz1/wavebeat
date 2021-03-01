@@ -158,7 +158,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         N_target = target.shape[-1] # target samples
 
         # random crop of the audio and target if larger than desired
-        if N_audio > self.length:
+        if N_audio > self.length or N_target > self.target_length:
             audio_start = np.random.randint(0, N_audio - self.length - 1)
             audio_stop  = audio_start + self.length
             target_start = int(audio_start / self.target_factor)
@@ -317,7 +317,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target[:,start:stop] = 0
 
         # apply time stretching
-        if np.random.rand() < 0.3:
+        if np.random.rand() < 0.0:
             factor = np.random.normal(1.0, 0.5)  
             factor = np.clip(factor, a_min=0.6, a_max=1.8)
 
@@ -344,7 +344,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             new_beat_ind = (new_beat_sec * self.target_sample_rate).long()
 
             # now convert indices back to target vector
-            new_size = int(target.shape[-1] / factor)
+            new_size = int(np.ceil(target.shape[-1] / factor))
             streteched_target = torch.zeros(2,new_size)
             streteched_target[0,new_beat_ind] = 1
             streteched_target[1,new_dbeat_ind] = 1
