@@ -84,7 +84,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             stop = int(len(self.audio_files) * 0.9)
         elif self.subset == "test":
             start = int(len(self.audio_files) * 0.9)
-            stop = -1
+            stop = None
         elif self.subset in ["full-train", "full-val"]:
             start = 0
             stop = None
@@ -158,7 +158,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         N_target = target.shape[-1] # target samples
 
         # random crop of the audio and target if larger than desired
-        if N_audio > self.length or N_target > self.target_length:
+        if (N_audio > self.length or N_target > self.target_length) and self.subset not in ['val', 'test']:
             audio_start = np.random.randint(0, N_audio - self.length - 1)
             audio_stop  = audio_start + self.length
             target_start = int(audio_start / self.target_factor)
@@ -166,8 +166,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio = audio[:,audio_start:audio_stop]
             target = target[:,target_start:target_stop]
             #print(f"crop: {audio.shape} {target.shape}")
-
-        else: # pad the audio and target is shorter than desired
+        elif self.subset not in ['val', 'test']: # pad the audio and target is shorter than desired
             pad_size = self.length - N_audio
             #print(f"audio pad: {pad_size}")
             padl = pad_size - (pad_size // 2)

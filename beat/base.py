@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 from beat.plot import plot_activations, make_table, plot_histogram
 from beat.loss import GlobalMSELoss, GlobalBCELoss
 from beat.utils import center_crop, causal_crop
-from beat.peak import find_beats
+from beat.eval import evaluate, find_beats
 from beat.filter import FIRFilter
 
 class Base(pl.LightningModule):
@@ -173,41 +173,7 @@ class Base(pl.LightningModule):
             g = outputs["Genre"][idx]
             s = outputs["Time signature"][idx]
 
-            # separate the beats and downbeat activations
-            t_beats = t[0,:]
-            t_downbeats = t[1,:]
-            p_beats = p[0,:]
-            p_downbeats = p[1,:]
-
-            ref_beats, est_beats, _ = find_beats(t_beats, 
-                                                 p_beats, 
-                                                 beat_type="beat",
-                                                 sample_rate=self.hparams.target_sample_rate)
-            ref_downbeats, est_downbeats, _ = find_beats(t_downbeats, 
-                                                         p_downbeats, 
-                                                         beat_type="downbeat",
-                                                         sample_rate=self.hparams.target_sample_rate)
-
-            #dbn_beats = dbn(t.T).T
-            #dbn_est_beats = dbn_beats[0,:] 
-            #dnb_est_downbeats = dbn_beats[1,:] 
-            
-            # evaluate beats - trim beats before 5 seconds.
-            ref_beats = mir_eval.beat.trim_beats(ref_beats)
-            est_beats = mir_eval.beat.trim_beats(est_beats)
-            beat_scores = mir_eval.beat.evaluate(ref_beats, est_beats)
-
-            # evaluate downbeats - trim beats before 5 seconds.
-            ref_downbeats = mir_eval.beat.trim_beats(ref_downbeats)
-            est_downbeats = mir_eval.beat.trim_beats(est_downbeats)
-            downbeat_scores = mir_eval.beat.evaluate(ref_downbeats, est_downbeats)
-
-            # evaluate beats from DBN
-            #est_dbn_beats = mir_eval.beat.trim_beats(dbn_est_beats)
-            #dbn_beat_scores = mir_eval.beat.evaluate(ref_beats, est_dbn_beats)
-
-            #est_dbn_downbeats = mir_eval.beat.trim_beats(dnb_est_downbeats)
-            #dbn_downbeat_scores = mir_eval.beat.evaluate(ref_downbeats, dnb_est_downbeats)
+            beat_scores, downbeat_scores = evaluate(p, t)
 
             songs.append({
                 "Filename" : f,
