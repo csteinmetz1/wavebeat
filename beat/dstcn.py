@@ -22,7 +22,7 @@ def get_activation(act_type,
     elif act_type == "SELU":
         return torch.nn.SELU()
     elif act_type == "ELU":
-        return torch.nn.SELU()
+        return torch.nn.ELU()
 
 class dsTCNBlock(torch.nn.Module):
     def __init__(self, 
@@ -54,6 +54,9 @@ class dsTCNBlock(torch.nn.Module):
             self.norm1 = torch.nn.BatchNorm1d(out_ch)
             #self.norm2 = torch.nn.BatchNorm1d(out_ch)
             self.res_norm = torch.nn.BatchNorm1d(out_ch)
+        else:
+            self.norm1 = None
+            self.res_norm = None
 
         #self.conv2 = torch.nn.Conv1d(out_ch, 
         #                             out_ch, 
@@ -71,7 +74,7 @@ class dsTCNBlock(torch.nn.Module):
         
         # -- first section --
         x = self.conv1(x)
-        if self.norm_type is not None:
+        if self.norm1 is not None:
             x = self.norm1(x)
         x = self.act1(x)
 
@@ -83,7 +86,7 @@ class dsTCNBlock(torch.nn.Module):
 
         # -- residual connection --
         x_res = self.res_conv(x_res)
-        if self.norm_type is not None:
+        if self.res_norm is not None:
             x_res = self.res_norm(x_res)
 
         return x + x_res
