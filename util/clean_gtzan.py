@@ -57,7 +57,7 @@ for idx, annot_file in enumerate(annot_files):
             else:
                 beat_idx += 1
             line = f"{beat} {beat_idx}"
-            fp.write(f"{beat} {beat_idx}")
+            fp.write(f"{beat} {beat_idx}\n")
 
     #break
 
