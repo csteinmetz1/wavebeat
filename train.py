@@ -127,7 +127,7 @@ train_dataloader = torch.utils.data.DataLoader(train_dataset_list,
                                                 pin_memory=True)
 val_dataloader = torch.utils.data.DataLoader(val_dataset_list, 
                                             shuffle=args.shuffle,
-                                            batch_size=4,
+                                            batch_size=1,
                                             num_workers=args.num_workers,
                                             pin_memory=False)    
 
