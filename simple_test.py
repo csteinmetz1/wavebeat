@@ -110,7 +110,21 @@ for dataset in datasets:
     results[dataset] = {
         "F-measure" : {
             "beat" : [],
-            "downbeat" : []
+            "dbn beat" : [],
+            "downbeat" : [],
+            "dbn downbeat" : [],
+        },
+        "CMLt" : {
+            "beat" : [],
+            "dbn beat" : [],
+            "downbeat" : [],
+            "dbn downbeat" : [],
+        },
+        "AMLt" : {
+            "beat" : [],
+            "dbn beat" : [],
+            "downbeat" : [],
+            "dbn downbeat" : [],
         }
     }
 
@@ -128,15 +142,41 @@ for dataset in datasets:
         pred = pred.cpu()
         target = target.cpu()
 
-        beat_scores, downbeat_scores = evaluate(pred.view(2,-1).numpy(), 
-                                                target.view(2,-1).numpy(), 
-                                                model.hparams.target_sample_rate)
+        beat_scores, downbeat_scores = evaluate(pred.view(2,-1),  
+                                                target.view(2,-1), 
+                                                model.hparams.target_sample_rate,
+                                                use_dbn=False)
+
+        dbn_beat_scores, dbn_downbeat_scores = evaluate(pred.view(2,-1), 
+                                                target.view(2,-1), 
+                                                model.hparams.target_sample_rate,
+                                                use_dbn=True)
 
         results[dataset]['F-measure']['beat'].append(beat_scores['F-measure'])
+        results[dataset]['CMLt']['beat'].append(beat_scores['Correct Metric Level Total'])
+        results[dataset]['AMLt']['beat'].append(beat_scores['Any Metric Level Total'])
+
+        results[dataset]['F-measure']['dbn beat'].append(dbn_beat_scores['F-measure'])
+        results[dataset]['CMLt']['dbn beat'].append(dbn_beat_scores['Correct Metric Level Total'])
+        results[dataset]['AMLt']['dbn beat'].append(dbn_beat_scores['Any Metric Level Total'])
+
         results[dataset]['F-measure']['downbeat'].append(downbeat_scores['F-measure'])
+        results[dataset]['CMLt']['downbeat'].append(downbeat_scores['Correct Metric Level Total'])
+        results[dataset]['AMLt']['downbeat'].append(downbeat_scores['Any Metric Level Total'])
+
+        results[dataset]['F-measure']['dbn downbeat'].append(dbn_downbeat_scores['F-measure'])
+        results[dataset]['CMLt']['dbn downbeat'].append(dbn_downbeat_scores['Correct Metric Level Total'])
+        results[dataset]['AMLt']['dbn downbeat'].append(dbn_downbeat_scores['Any Metric Level Total'])
 
     print()
-    print(f"{dataset}: avg. F1 beat: {np.mean(results[dataset]['F-measure']['beat'])}   avg. F1 downbeat: {np.mean(results[dataset]['F-measure']['downbeat'])}")
+    print(f"{dataset}")
+    print(f"F1 beat: {np.mean(results[dataset]['F-measure']['beat'])}   F1 downbeat: {np.mean(results[dataset]['F-measure']['downbeat'])}")
+    print(f"CMLt beat: {np.mean(results[dataset]['CMLt']['beat'])}   CMLt downbeat: {np.mean(results[dataset]['CMLt']['downbeat'])}")
+    print(f"AMLt beat: {np.mean(results[dataset]['AMLt']['beat'])}   AMLt downbeat: {np.mean(results[dataset]['AMLt']['downbeat'])}")
+    print()
+    print(f"F1 dbn beat: {np.mean(results[dataset]['F-measure']['dbn beat'])}   F1 dbn downbeat: {np.mean(results[dataset]['F-measure']['dbn downbeat'])}")
+    print(f"CMLt dbn  beat: {np.mean(results[dataset]['CMLt']['dbn beat'])}   CMLt dbn downbeat: {np.mean(results[dataset]['CMLt']['dbn downbeat'])}")
+    print(f"AMLt dbn beat: {np.mean(results[dataset]['AMLt']['dbn beat'])}   AMLt dbn downbeat: {np.mean(results[dataset]['AMLt']['dbn downbeat'])}")
     print()
 
 results_dir = 'results/test.json'

@@ -173,7 +173,7 @@ class Base(pl.LightningModule):
             g = outputs["Genre"][idx]
             s = outputs["Time signature"][idx]
 
-            beat_scores, downbeat_scores = evaluate(p, t)
+            beat_scores, downbeat_scores = evaluate(p, t, self.hparams.target_sample_rate)
 
             songs.append({
                 "Filename" : f,

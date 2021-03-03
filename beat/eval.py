@@ -1,3 +1,4 @@
+import madmom
 import mir_eval
 import numpy as np
 import scipy.signal
@@ -67,21 +68,43 @@ def find_beats(t, p,
 
     return ref_beats, est_beats, est_sm
 
-def evaluate(pred, target, target_sample_rate):
+def evaluate(pred, target, target_sample_rate, use_dbn=False):
 
-    t_beats = target[0,:]
-    t_downbeats = target[1,:]
-    p_beats = pred[0,:]
-    p_downbeats = pred[1,:]
+    t_beats = target[0,:].numpy()
+    t_downbeats = target[1,:].numpy()
+    p_beats = pred[0,:].numpy()
+    p_downbeats = pred[1,:].numpy()
 
     ref_beats, est_beats, _ = find_beats(t_beats, 
                                         p_beats, 
                                         beat_type="beat",
                                         sample_rate=target_sample_rate)
+
     ref_downbeats, est_downbeats, _ = find_beats(t_downbeats, 
                                                 p_downbeats, 
                                                 beat_type="downbeat",
                                                 sample_rate=target_sample_rate)
+
+    if use_dbn:
+        beat_dbn = madmom.features.beats.DBNBeatTrackingProcessor(
+            min_bpm=55,
+            max_bpm=215,
+            transition_lambda=100,
+            fps=target_sample_rate,
+            online=False)
+
+        downbeat_dbn = madmom.features.beats.DBNBeatTrackingProcessor(
+            min_bpm=10,
+            max_bpm=75,
+            transition_lambda=100,
+            fps=target_sample_rate,
+            online=False)
+
+        beat_pred = pred[0,:].clamp(1e-8, 0.999999).view(-1).numpy()
+        downbeat_pred = pred[1,:].clamp(1e-8, 0.999999).view(-1).numpy()
+
+        est_beats = beat_dbn.process_offline(beat_pred)
+        est_downbeats = downbeat_dbn.process_offline(downbeat_pred)
 
     # evaluate beats - trim beats before 5 seconds.
     ref_beats = mir_eval.beat.trim_beats(ref_beats)

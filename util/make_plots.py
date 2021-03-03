@@ -69,5 +69,25 @@ if __name__ == '__main__':
     make_dataset_boxplot(results)
 
     for dataset, result in results.items():
-        print(f"{dataset}: avg. F1 beat: {np.mean(results[dataset]['F-measure']['beat']):0.3f}   avg. F1 downbeat: {np.mean(results[dataset]['F-measure']['downbeat']):0.3f}")
+        print()
+        print(f"{dataset}")
+        wavebeat_peak = ""
+        wavebeat_dbn = ""
+        
+        wavebeat_peak += f"{np.mean(results[dataset]['F-measure']['beat']):0.3f} & "
+        wavebeat_peak += f"{np.mean(results[dataset]['CMLt']['beat']):0.3f} & "
+        wavebeat_peak += f"{np.mean(results[dataset]['AMLt']['beat']):0.3f} & "
+        wavebeat_peak += f"{np.mean(results[dataset]['F-measure']['downbeat']):0.3f} & "
+        wavebeat_peak += f"{np.mean(results[dataset]['CMLt']['downbeat']):0.3f} & "
+        wavebeat_peak += f"{np.mean(results[dataset]['AMLt']['downbeat']):0.3f} "
+        print(wavebeat_peak)
+
+        wavebeat_dbn += f"{np.mean(results[dataset]['F-measure']['dbn beat']):0.3f} & " 
+        wavebeat_dbn += f"{np.mean(results[dataset]['CMLt']['dbn beat']):0.3f} & "
+        wavebeat_dbn += f"{np.mean(results[dataset]['AMLt']['dbn beat']):0.3f} & "
+        wavebeat_dbn += f"{np.mean(results[dataset]['F-measure']['dbn downbeat']):0.3f} & "
+        wavebeat_dbn += f"{np.mean(results[dataset]['CMLt']['dbn downbeat']):0.3f} & "
+        wavebeat_dbn += f"{np.mean(results[dataset]['AMLt']['dbn downbeat']):0.3f} "
+        print(wavebeat_dbn)
+        print()
 

@@ -27,7 +27,8 @@ class DownbeatDataset(torch.utils.data.Dataset):
                  fraction=1.0,
                  augment=False,
                  dry_run=False,
-                 pad_mode='constant'):
+                 pad_mode='constant',
+                 examples_per_epoch=1000):
         """
         Args:
             audio_dir (str): Path to the root directory containing the audio (.wav) files.
@@ -43,6 +44,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             augment (bool, optional): Apply random data augmentations to input audio. (Default: False)
             dry_run (bool, optional): Train on a single example. (Default: False)
             pad_mode (str, optional): Padding type for inputs 'constant', 'reflect', 'replicate' or 'circular'. (Default: 'constant')
+            examples_per_epoch (int, optional): Number of examples to sample from the dataset per epoch. (Default: 1000)
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
@@ -59,6 +61,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         self.dry_run = dry_run
         self.pad_mode = pad_mode
         self.dataset = dataset
+        self.examples_per_epoch = examples_per_epoch
 
         self.target_length = int(self.length / self.target_factor)
         #print(f"Audio length: {self.length}")
@@ -134,16 +137,20 @@ class DownbeatDataset(torch.utils.data.Dataset):
                     self.data.append((audio, target, metadata))
 
     def __len__(self):
-        return len(self.audio_files)
+        if self.subset in ["test", "val"]:
+            length = len(self.audio_files)
+        else:
+            length = self.examples_per_epoch
+        return length
 
     def __getitem__(self, idx):
 
         if self.preload:
-            audio, target, metadata = self.data[idx]
+            audio, target, metadata = self.data[idx % len(self.audio_files)]
         else:
             # get metadata of example
-            audio_filename = self.audio_files[idx]
-            annot_filename = self.annot_files[idx]
+            audio_filename = self.audio_files[idx % len(self.audio_files)]
+            annot_filename = self.annot_files[idx % len(self.audio_files)]
             audio, target, metadata = self.load_data(audio_filename, annot_filename)
 
         # do all processing in float32 not float16
