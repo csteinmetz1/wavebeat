@@ -33,7 +33,7 @@ def find_beats(t, p,
         p = scipy.signal.sosfilt(sos, p)
 
     # normalize the smoothed signal between 0.0 and 1.0
-    p /= np.max(p)                                     
+    p /= np.max(np.abs(p))                                     
 
     if peak_type == "simple":
         # by default, we assume that the min distance between beats is fs/4
@@ -70,18 +70,18 @@ def find_beats(t, p,
 
 def evaluate(pred, target, target_sample_rate, use_dbn=False):
 
-    t_beats = target[0,:].numpy()
-    t_downbeats = target[1,:].numpy()
-    p_beats = pred[0,:].numpy()
-    p_downbeats = pred[1,:].numpy()
+    t_beats = target[0,:]
+    t_downbeats = target[1,:]
+    p_beats = pred[0,:]
+    p_downbeats = pred[1,:]
 
-    ref_beats, est_beats, _ = find_beats(t_beats, 
-                                        p_beats, 
+    ref_beats, est_beats, _ = find_beats(t_beats.numpy(), 
+                                        p_beats.numpy(), 
                                         beat_type="beat",
                                         sample_rate=target_sample_rate)
 
-    ref_downbeats, est_downbeats, _ = find_beats(t_downbeats, 
-                                                p_downbeats, 
+    ref_downbeats, est_downbeats, _ = find_beats(t_downbeats.numpy(), 
+                                                p_downbeats.numpy(), 
                                                 beat_type="downbeat",
                                                 sample_rate=target_sample_rate)
 
@@ -100,8 +100,8 @@ def evaluate(pred, target, target_sample_rate, use_dbn=False):
             fps=target_sample_rate,
             online=False)
 
-        beat_pred = pred[0,:].clamp(1e-8, 0.999999).view(-1).numpy()
-        downbeat_pred = pred[1,:].clamp(1e-8, 0.999999).view(-1).numpy()
+        beat_pred = pred[0,:].clamp(1e-8, 1-1e-8).view(-1).numpy()
+        downbeat_pred = pred[1,:].clamp(1e-8, 1-1e-8).view(-1).numpy()
 
         est_beats = beat_dbn.process_offline(beat_pred)
         est_downbeats = downbeat_dbn.process_offline(downbeat_pred)

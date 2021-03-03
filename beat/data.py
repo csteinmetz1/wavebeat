@@ -36,7 +36,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio_sample_rate (float, optional): Sample rate of the audio files. (Default: 44100)
             target_factor (float, optional): Sample rate of the audio files. (Default: 256)
             subset (str, optional): Pull data either from "train", "val", "test", or "full-train", "full-val" subsets. (Default: "train")
-            dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc_popular". (Default: "ballroom")
+            dataset (str, optional): Name of the dataset to be loaded "ballroom", "beatles", "hainsworth", "rwc_popular", "gtzan", "smc". (Default: "ballroom")
             length (int, optional): Number of samples in the returned examples. (Default: 40)
             preload (bool, optional): Read in all data into RAM during init. (Default: False)
             half (bool, optional): Store the float32 audio as float16. (Default: True)
@@ -45,6 +45,9 @@ class DownbeatDataset(torch.utils.data.Dataset):
             dry_run (bool, optional): Train on a single example. (Default: False)
             pad_mode (str, optional): Padding type for inputs 'constant', 'reflect', 'replicate' or 'circular'. (Default: 'constant')
             examples_per_epoch (int, optional): Number of examples to sample from the dataset per epoch. (Default: 1000)
+
+        Notes:
+            - The SMC dataset contains only beats (no downbeats), so it should be used only for beat evaluation.
         """
         self.audio_dir = audio_dir
         self.annot_dir = annot_dir
@@ -70,14 +73,16 @@ class DownbeatDataset(torch.utils.data.Dataset):
         # first get all of the audio files
         if self.dataset in ["beatles", "rwc_popular"]:
             file_ext = "*L+R.wav"
-        elif self.dataset in ["ballroom", "hainsworth"]:
+        elif self.dataset in ["ballroom", "hainsworth", "gtzan", "smc"]:
             file_ext = "*.wav"
         else:
             raise ValueError(f"Invalid dataset: {self.dataset}")
 
         self.audio_files = glob.glob(os.path.join(self.audio_dir, "**", file_ext))
-        #self.audio_files.sort() # sort the list of audio files
-        random.shuffle(self.audio_files)
+        if len(self.audio_files) == 0: # try from the root audio dir
+            self.audio_files = glob.glob(os.path.join(self.audio_dir, file_ext))
+
+        random.shuffle(self.audio_files) # shuffle them
 
         if self.subset == "train":
             start = 0
@@ -106,9 +111,9 @@ class DownbeatDataset(torch.utils.data.Dataset):
             # find the corresponding annot file
             if self.dataset in ["rwc_popular", "beatles"]:
                 replace = "_L+R.wav"
-            elif self.dataset in ["ballroom", "hainsworth"]:
+            elif self.dataset in ["ballroom", "hainsworth", "gtzan", "smc"]:
                 replace = ".wav"
-
+            
             filename = os.path.basename(audio_file).replace(replace, "")
 
             if self.dataset == "ballroom":
@@ -124,6 +129,13 @@ class DownbeatDataset(torch.utils.data.Dataset):
                 album_dir = os.path.basename(os.path.dirname(audio_file))
                 annot_file = os.path.join(self.annot_dir, album_dir, f"{filename}.BEAT.TXT")
                 self.annot_files.append(annot_file)
+            elif self.dataset == "gtzan":
+                annot_file = os.path.join(self.annot_dir, f"{filename}.wav.txt")
+                self.annot_files.append(annot_file)
+            elif self.dataset == "smc":
+                annot_filepath = os.path.join(self.annot_dir, f"{filename}*.txt")
+                annot_file = glob.glob(annot_filepath)[0]
+                self.annot_files.append(annot_file)
 
         self.data = [] # when preloading store audio data and metadata
         if self.preload:
@@ -137,7 +149,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
                     self.data.append((audio, target, metadata))
 
     def __len__(self):
-        if self.subset in ["test", "val"]:
+        if self.subset in ["test", "val", "full-val", "full-test"]:
             length = len(self.audio_files)
         else:
             length = self.examples_per_epoch
@@ -165,7 +177,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         N_target = target.shape[-1] # target samples
 
         # random crop of the audio and target if larger than desired
-        if (N_audio > self.length or N_target > self.target_length) and self.subset not in ['val', 'test']:
+        if (N_audio > self.length or N_target > self.target_length) and self.subset not in ['val', 'test', 'full-val']:
             audio_start = np.random.randint(0, N_audio - self.length - 1)
             audio_stop  = audio_start + self.length
             target_start = int(audio_start / self.target_factor)
@@ -173,7 +185,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio = audio[:,audio_start:audio_stop]
             target = target[:,target_start:target_stop]
             #print(f"crop: {audio.shape} {target.shape}")
-        elif self.subset not in ['val', 'test']: # pad the audio and target is shorter than desired
+        elif self.subset not in ['val', 'test', 'full-val']: # pad the audio and target is shorter than desired
             pad_size = self.length - N_audio
             #print(f"audio pad: {pad_size}")
             padl = pad_size - (pad_size // 2)
@@ -226,8 +238,15 @@ class DownbeatDataset(torch.utils.data.Dataset):
         target = torch.zeros(2,N)
 
         # now convert from seconds to new sample rate
-        beat_samples = beat_sec * self.target_sample_rate
-        downbeat_samples = downbeat_sec * self.target_sample_rate
+        beat_samples = np.array(beat_sec * self.target_sample_rate)
+        downbeat_samples = np.array(downbeat_sec * self.target_sample_rate)
+
+        # check if there are any beats beyond the file end
+        beat_samples = beat_samples[beat_samples < N]
+        downbeat_samples = downbeat_samples[downbeat_samples < N]
+
+        beat_samples = beat_samples.astype(int)
+        downbeat_samples = downbeat_samples.astype(int)
 
         target[0,beat_samples] = 1  # first channel is beats
         target[1,downbeat_samples] = 1  # second channel is downbeats
@@ -266,9 +285,15 @@ class DownbeatDataset(torch.utils.data.Dataset):
             elif self.dataset == "rwc_popular":
                 line = line.strip('\n')
                 line = line.split('\t')
-
                 time_sec = int(line[0]) / 100.0
                 beat = 1 if int(line[2]) == 384 else 2
+            elif self.dataset == "gtzan":
+                line = line.strip('\n')
+                time_sec, beat = line.split(' ')
+            elif self.dataset == "smc":
+                line = line.strip('\n')
+                time_sec = line
+                beat = 1
 
             # convert beat to one-hot
             beat = int(beat)

@@ -83,14 +83,6 @@ class Base(pl.LightningModule):
         # pass the input thrgouh the mode
         pred = self(input)
 
-        # apply lowpass filters
-        #pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
-        #pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
-
-        # combine back (we don't filter the target)
-        #pred = torch.cat((pred_beats, pred_downbeats), dim=1)
-        #target = torch.cat((target_beats, target_downbeats), dim=1)
-
         # crop the input and target signals
         if self.hparams.causal:
             input_crop = causal_crop(input, pred.shape[-1])
@@ -100,25 +92,18 @@ class Base(pl.LightningModule):
             target_crop = center_crop(target, pred.shape[-1])
 
         # compute the validation error using all losses
-        #bce_loss = self.bce(pred, target_crop)
-        #l1_loss = self.l1(pred, target_crop)
-        #l2_loss = self.l2(pred, target_crop)
         gmse_loss, _, _ = self.gbce(pred, target_crop)
 
         self.log('val_loss', gmse_loss)
-        #self.log('val_loss/L1', l1_loss)
-        #self.log('val_loss/L2', l2_loss)
-        #self.log('val_loss/Beat', pos)
-        #self.log('val_loss/No Beat', neg)
 
         # apply sigmoid after computing loss
         pred = torch.sigmoid(pred)
 
         # move tensors to cpu for logging
         outputs = {
-            "input" : input_crop.cpu().numpy(),
-            "target": target_crop.cpu().numpy(),
-            "pred"  : pred.cpu().numpy(),
+            "input" : input_crop.cpu(),
+            "target": target_crop.cpu(),
+            "pred"  : pred.cpu(),
             "Filename" : metadata['Filename'],
             "Genre" : metadata['Genre'],
             "Time signature" : metadata['Time signature']
@@ -190,8 +175,11 @@ class Base(pl.LightningModule):
             #dbn_beat_f1_scores.append(dbn_beat_scores['F-measure'])
             #dbn_downbeat_f1_scores.append(dbn_downbeat_scores['F-measure'])
 
-        self.log('val_loss/Beat F-measure', np.mean(beat_f1_scores))
-        self.log('val_loss/Downbeat F-measure', np.mean(downbeat_f1_scores))
+        beat_f_measure = np.mean(beat_f1_scores)
+        downbeat_f_measure = np.mean(downbeat_f1_scores)
+        self.log('val_loss/Beat F-measure', torch.tensor(beat_f_measure))
+        self.log('val_loss/Downbeat F-measure', torch.tensor(downbeat_f_measure))
+        self.log('val_loss/Joint F-measure', torch.tensor(np.mean([beat_f_measure,downbeat_f_measure])))
         #self.log('val_loss/(DBN) Beat F-measure', np.mean(dbn_beat_f1_scores))
         #self.log('val_loss/(DBN) Downbeat F-measure', np.mean(dbn_downbeat_f1_scores))
 
@@ -217,13 +205,13 @@ class Base(pl.LightningModule):
             p_beats = p[0,:]
             p_downbeats = p[1,:]
 
-            ref_beats, est_beats, est_sm = find_beats(t_beats, 
-                                                      p_beats, 
+            ref_beats, est_beats, est_sm = find_beats(t_beats.numpy(), 
+                                                      p_beats.numpy(), 
                                                       beat_type="beat",
                                                       sample_rate=self.hparams.target_sample_rate)
 
-            ref_downbeats, est_downbeats, est_downbeat_sm = find_beats(t_downbeats, 
-                                                                       p_downbeats, 
+            ref_downbeats, est_downbeats, est_downbeat_sm = find_beats(t_downbeats.numpy(), 
+                                                                       p_downbeats.numpy(), 
                                                                        beat_type="downbeat",
                                                                        sample_rate=self.hparams.target_sample_rate)
             # log audio examples
@@ -284,11 +272,12 @@ class Base(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
                                                                   patience=self.hparams.patience, 
-                                                                  verbose=True)
+                                                                  verbose=True,
+                                                                  mode='max')
         return {
             'optimizer': optimizer,
             'lr_scheduler': lr_scheduler,
-            'monitor': 'val_loss'
+            'monitor': 'val_loss/Joint F-measure'
         }
 
     # add any model hyperparameters here

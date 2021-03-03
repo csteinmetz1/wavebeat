@@ -32,6 +32,10 @@ parser.add_argument('--hainsworth_audio_dir', type=str, default='./data')
 parser.add_argument('--hainsworth_annot_dir', type=str, default='./data')
 parser.add_argument('--rwc_popular_audio_dir', type=str, default='./data')
 parser.add_argument('--rwc_popular_annot_dir', type=str, default='./data')
+parser.add_argument('--gtzan_audio_dir', type=str, default='./data')
+parser.add_argument('--gtzan_annot_dir', type=str, default='./data')
+parser.add_argument('--smc_audio_dir', type=str, default='./data')
+parser.add_argument('--smc_annot_dir', type=str, default='./data')
 
 args = parser.parse_args()
 
@@ -69,7 +73,8 @@ model.to('cuda:0')
 # set model to eval mode
 model.eval()
 
-datasets = ["beatles", "ballroom", "hainsworth", "rwc_popular"]
+datasets = ["beatles", "ballroom", "hainsworth", "rwc_popular", "gtzan", "smc"]
+datasets = ["gtzan"]
 results = {} # storage for our result metrics
 
 # set the seed
@@ -89,13 +94,19 @@ for dataset in datasets:
     elif dataset == "rwc_popular":
         audio_dir = args.rwc_popular_audio_dir
         annot_dir = args.rwc_popular_annot_dir
+    elif dataset == "gtzan":
+        audio_dir = args.gtzan_audio_dir
+        annot_dir = args.gtzan_annot_dir
+    elif dataset == "smc":
+        audio_dir = args.smc_audio_dir
+        annot_dir = args.smc_annot_dir
 
     test_dataset = DownbeatDataset(audio_dir,
                                     annot_dir,
                                     dataset=dataset,
                                     audio_sample_rate=config['audio_sample_rate'],
                                     target_factor=config['target_factor'],
-                                    subset="test",
+                                    subset="test" if not dataset in ["gtzan", "smc"] else "full-val",
                                     augment=False,
                                     half=True if config['precision'] == 16 else False,
                                     preload=args.preload)
@@ -136,7 +147,7 @@ for dataset in datasets:
         target = target.to('cuda:0')
 
         with torch.no_grad():
-            pred = model(audio)
+            pred = torch.sigmoid(model(audio))
 
         # move data back to CPU
         pred = pred.cpu()
@@ -151,6 +162,10 @@ for dataset in datasets:
                                                 target.view(2,-1), 
                                                 model.hparams.target_sample_rate,
                                                 use_dbn=True)
+
+        print()
+        print(f"beat {beat_scores['F-measure']:0.3f} mean: {np.mean(results[dataset]['F-measure']['beat']):0.3f}  ")
+        print(f"downbeat: {downbeat_scores['F-measure']:0.3f} mean: {np.mean(results[dataset]['F-measure']['downbeat']):0.3f}")
 
         results[dataset]['F-measure']['beat'].append(beat_scores['F-measure'])
         results[dataset]['CMLt']['beat'].append(beat_scores['Correct Metric Level Total'])

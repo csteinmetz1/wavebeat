@@ -6,6 +6,7 @@ from itertools import product
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
+from pytorch_lightning.callbacks import ModelCheckpoint
 from beat.tcn import TCNModel
 from beat.dstcn import dsTCNModel
 from beat.lstm import LSTMModel
@@ -41,6 +42,12 @@ parser.add_argument('--num_workers', type=int, default=0)
 parser.add_argument('--augment', action='store_true')
 parser.add_argument('--dry_run', action='store_true')
 
+checkpoint_callback = ModelCheckpoint(
+    verbose=True,
+    monitor='val_loss/Joint F-measure',
+    mode='max'
+)
+
 # add all the available trainer options to argparse
 parser = pl.Trainer.add_argparse_args(parser)
 
@@ -70,7 +77,7 @@ args.default_root_dir = os.path.join("lightning_logs", "full")
 print(args.default_root_dir)
 
 # create the trainer
-trainer = pl.Trainer.from_argparse_args(args)
+trainer = pl.Trainer.from_argparse_args(args, checkpoint_callback=checkpoint_callback)
 
 # setup the dataloaders
 train_datasets = []
