@@ -6,9 +6,9 @@ import torchsummary
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
-from beat.base import Base
-from beat.filter import FIRFilter
-from beat.utils import center_crop, causal_crop
+from wavebeat.base import Base
+from wavebeat.filter import FIRFilter
+from wavebeat.utils import center_crop, causal_crop
 
 class FiLM(torch.nn.Module):
     def __init__(self, 

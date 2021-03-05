@@ -1,7 +1,7 @@
 import torch
 from argparse import ArgumentParser
 
-from beat.base import Base
+from wavebeat.base import Base
 
 def get_activation(act_type, 
                    ch=None):

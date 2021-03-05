@@ -8,11 +8,11 @@ import torchsummary
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
-from beat.plot import plot_activations, make_table, plot_histogram
-from beat.loss import GlobalMSELoss, GlobalBCELoss
-from beat.utils import center_crop, causal_crop
-from beat.eval import evaluate, find_beats
-from beat.filter import FIRFilter
+from wavebeat.plot import plot_activations, make_table, plot_histogram
+from wavebeat.loss import GlobalMSELoss, GlobalBCELoss
+from wavebeat.utils import center_crop, causal_crop
+from wavebeat.eval import evaluate, find_beats
+from wavebeat.filter import FIRFilter
 
 class Base(pl.LightningModule):
     """ Base module with train and validation loops.

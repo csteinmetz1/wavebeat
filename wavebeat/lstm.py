@@ -1,7 +1,7 @@
 import torch
 import pytorch_lightning as pl
 
-from beat.base import Base
+from wavebeat.base import Base
 
 class LSTMModel(Base):
     def __init__(self, 

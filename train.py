@@ -7,11 +7,11 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from pytorch_lightning.callbacks import ModelCheckpoint
-from beat.tcn import TCNModel
-from beat.dstcn import dsTCNModel
-from beat.lstm import LSTMModel
-from beat.waveunet import WaveUNetModel
-from beat.data import DownbeatDataset
+from wavebeat.tcn import TCNModel
+from wavebeat.dstcn import dsTCNModel
+from wavebeat.lstm import LSTMModel
+from wavebeat.waveunet import WaveUNetModel
+from wavebeat.data import DownbeatDataset
 
 torch.backends.cudnn.benchmark = True
 

@@ -4,8 +4,8 @@ import argparse
 import numpy as np
 import pytorch_lightning as pl
 
-from beat.base import Base
-from beat.utils import center_crop, causal_crop
+from wavebeat.base import Base
+from wavebeat.utils import center_crop, causal_crop
 
 class DSBlock(torch.nn.Module):
     def __init__(self, 
