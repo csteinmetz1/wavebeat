@@ -130,3 +130,4 @@ dmypy.json
 
 lightning_logs/
 .vscode/
+*.ckpt

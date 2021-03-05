@@ -14,17 +14,28 @@ End-to-end beating tracking with temporal convolutional networks.
 
 ## Setup
 
-Setup a virtual environment and install packages.
+Setup a virtual environment and activate it.
 ```
 python3 -m venv env/
 source env/bin/activate
+```
+Next install numpy and cython first, manually.
+```
+pip install numpy cython
+```
+Then install the packages.
+```
 pip install -r requirements.txt
 ```
+
+This will ensure that `madmom` installs properly, as it 
+currently fails unless cython and numpy as installed first. 
 
 ## Predicting beats
 
 We provide a simple interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
-To beging you will first need to download the pre-trained model [here](), and place it in the [`models/`](models/) directory.
+To beging you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1q8RaF_ScLRiKgMpOYlY3YqNYT8xCL3TO/view?usp=sharing), 
+and place it in the [`checkpoints/`](checkpoints/) directory.
 Then run the model by providing a path to an audio file.
 
 ```
