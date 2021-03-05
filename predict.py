@@ -23,9 +23,6 @@ else:
 # construct the model, and load weights from checkpoint
 model = dsTCNModel.load_from_checkpoint(ckpt_path)
 
-# move model to GPU
-model.to('cuda:0')
-
 # set model to eval mode
 model.eval()
 

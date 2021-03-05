@@ -10,11 +10,11 @@ from itertools import product
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
-from beat.tcn import TCNModel
-from beat.dstcn import dsTCNModel
-from beat.waveunet import WaveUNetModel
-from beat.data import DownbeatDataset
-from beat.eval import evaluate
+from wavebeat.tcn import TCNModel
+from wavebeat.dstcn import dsTCNModel
+from wavebeat.waveunet import WaveUNetModel
+from wavebeat.data import DownbeatDataset
+from wavebeat.eval import evaluate
 
 torch.backends.cudnn.benchmark = True
 
