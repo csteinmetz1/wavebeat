@@ -186,15 +186,15 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target = target[:,target_start:target_stop]
 
         # pad the audio and target is shorter than desired
-        if N_audio < self.length and self.subset not in ['val', 'test', 'full-val']: 
-            pad_size = self.length - N_audio
+        if audio.shape[-1] < self.length and self.subset not in ['val', 'test', 'full-val']: 
+            pad_size = self.length - audio.shape[-1]
             padl = pad_size - (pad_size // 2)
             padr = pad_size // 2
             audio = torch.nn.functional.pad(audio, 
                                             (padl, padr), 
                                             mode=self.pad_mode)
-        if N_target < self.target_length and self.subset not in ['val', 'test', 'full-val']: 
-            pad_size = self.target_length - N_target
+        if target.shape[-1] < self.target_length and self.subset not in ['val', 'test', 'full-val']: 
+            pad_size = self.target_length - target.shape[-1]
             padl = pad_size - (pad_size // 2)
             padr = pad_size // 2
             target = torch.nn.functional.pad(target, 
@@ -427,7 +427,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
 
         # apply a lowpass filter
-        if np.random.rand() < 0.25:
+        if np.random.rand() < 0.1:
             cutoff = (np.random.rand() * 4000) + 4000
             sos = scipy.signal.butter(2, 
                                       cutoff, 
@@ -438,7 +438,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             audio = torch.from_numpy(audio_filtered.astype('float32'))
 
         # apply a highpass filter
-        if np.random.rand() < 0.25:
+        if np.random.rand() < 0.1:
             cutoff = (np.random.rand() * 1000) + 20
             sos = scipy.signal.butter(2, 
                                       cutoff, 
@@ -447,6 +447,35 @@ class DownbeatDataset(torch.utils.data.Dataset):
                                       output='sos')
             audio_filtered = scipy.signal.sosfilt(sos, audio.numpy())
             audio = torch.from_numpy(audio_filtered.astype('float32'))
+
+        # apply a chorus effect
+        if np.random.rand() < 0.05:
+            tfm = sox.Transformer()        
+            tfm.chorus()
+            audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
+                                    sample_rate_in=self.audio_sample_rate)
+            audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
+
+        # apply a compressor effect
+        if np.random.rand() < 0.15:
+            attack = (np.random.rand() * 0.300) + 0.005
+            release = (np.random.rand() * 1.000) + 0.3
+            tfm = sox.Transformer()        
+            tfm.compand(attack_time=attack, decay_time=release)
+            audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
+                                    sample_rate_in=self.audio_sample_rate)
+            audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
+
+        # apply an EQ effect
+        if np.random.rand() < 0.15:
+            freq = (np.random.rand() * 8000) + 60
+            q = (np.random.rand() * 7.0) + 0.1
+            g = np.random.normal(0.0, 6)  
+            tfm = sox.Transformer()        
+            tfm.equalizer(frequency=freq, width_q=q, gain_db=g)
+            audio = tfm.build_array(input_array=audio.squeeze().numpy(), 
+                                    sample_rate_in=self.audio_sample_rate)
+            audio = torch.from_numpy(audio.astype('float32')).view(1,-1)
 
         # add white noise
         if np.random.rand() < 0.05:
