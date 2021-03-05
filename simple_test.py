@@ -10,9 +10,9 @@ from itertools import product
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 
-from wavebeat.tcn import TCNModel
+#from wavebeat.tcn import TCNModel
 from wavebeat.dstcn import dsTCNModel
-from wavebeat.waveunet import WaveUNetModel
+#from wavebeat.waveunet import WaveUNetModel
 from wavebeat.data import DownbeatDataset
 from wavebeat.eval import evaluate
 
@@ -58,13 +58,13 @@ else:
     ckpt_path = ckpts[-1]
 
 # let the model add what it wants
-if config['model_type'] == 'tcn':
-    model = TCNModel.load_from_checkpoint(ckpt_path)
-elif config['model_type'] == 'lstm':
-    model = LSTMModel.load_from_checkpoint(ckpt_path)
-elif config['model_type'] == 'waveunet':
-    model = WaveUNetModel.load_from_checkpoint(ckpt_path)
-elif config['model_type'] == 'dstcn':
+#if config['model_type'] == 'tcn':
+#    model = TCNModel.load_from_checkpoint(ckpt_path)
+#elif config['model_type'] == 'lstm':
+#    model = LSTMModel.load_from_checkpoint(ckpt_path)
+#elif config['model_type'] == 'waveunet':
+#    model = WaveUNetModel.load_from_checkpoint(ckpt_path)
+if config['model_type'] == 'dstcn':
     model = dsTCNModel.load_from_checkpoint(ckpt_path)
 
 # move model to GPU

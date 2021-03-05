@@ -7,10 +7,10 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from pytorch_lightning.callbacks import ModelCheckpoint
-from wavebeat.tcn import TCNModel
+#from wavebeat.tcn import TCNModel
 from wavebeat.dstcn import dsTCNModel
-from wavebeat.lstm import LSTMModel
-from wavebeat.waveunet import WaveUNetModel
+#from wavebeat.lstm import LSTMModel
+#from wavebeat.waveunet import WaveUNetModel
 from wavebeat.data import DownbeatDataset
 
 torch.backends.cudnn.benchmark = True
@@ -18,7 +18,7 @@ torch.backends.cudnn.benchmark = True
 parser = ArgumentParser()
 
 # add PROGRAM level args
-parser.add_argument('--model_type', type=str, default='tcn', help='tcn, lstm, waveunet, or dstcn')
+parser.add_argument('--model_type', type=str, default='dstcn', help='tcn, lstm, waveunet, or dstcn')
 parser.add_argument('--dataset', type=str, default='ballroom')
 parser.add_argument('--beatles_audio_dir', type=str, default='./data')
 parser.add_argument('--beatles_annot_dir', type=str, default='./data')
@@ -55,14 +55,16 @@ parser = pl.Trainer.add_argparse_args(parser)
 temp_args, _ = parser.parse_known_args()
 
 # let the model add what it wants
-if temp_args.model_type == 'tcn':
-    parser = TCNModel.add_model_specific_args(parser)
-elif temp_args.model_type == 'lstm':
-    parser = LSTMModel.add_model_specific_args(parser)
-elif temp_args.model_type == 'waveunet':
-    parser = WaveUNetModel.add_model_specific_args(parser)
-elif temp_args.model_type == 'dstcn':
+#if temp_args.model_type == 'tcn':
+#    parser = TCNModel.add_model_specific_args(parser)
+#elif temp_args.model_type == 'lstm':
+#    parser = LSTMModel.add_model_specific_args(parser)
+#elif temp_args.model_type == 'waveunet':
+#    parser = WaveUNetModel.add_model_specific_args(parser)
+if temp_args.model_type == 'dstcn':
     parser = dsTCNModel.add_model_specific_args(parser)
+else:
+    raise RuntimeError(f"Invalid model_type: {temp_args.model_type}")
 
 # parse them args
 args = parser.parse_args()
