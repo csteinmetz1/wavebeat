@@ -21,7 +21,7 @@ source env/bin/activate
 ```
 Next install numpy and cython first, manually.
 ```
-pip install numpy cython
+pip install numpy cython aiohttp
 ```
 Then install the packages.
 ```
@@ -29,14 +29,34 @@ pip install -r requirements.txt
 ```
 
 This will ensure that `madmom` installs properly, as it 
-currently fails unless cython and numpy as installed first. 
+currently fails unless cython, numpy, and aiohttp as installed first. 
 
 ## Predicting beats
 
-We provide a simple interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
 To begin you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1q8RaF_ScLRiKgMpOYlY3YqNYT8xCL3TO/view?usp=sharing).
 Place it in the [`checkpoints/`](checkpoints/) directory, and extract the `.zip` file.
-Then run the model by providing a path to an audio file.
+
+### Functional interface
+
+If you would like to use the functional interface, you can then install `wavebeat` as a package. 
+```
+python setup.py install
+```
+
+Note that as above, you will have to install `cython`, `numpy`, and `aiohttp` first, otherwise `madmom` install will fail. 
+
+Now you can create a script and import `wavebeat` as follows.
+
+```python
+from wavebeat.tracker import beatTracker
+
+beat, downbeats = beatTracker('audio.wav')
+```
+
+### Script interface
+
+We provide a simple scipt interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
+Run the model by providing a path to an audio file.
 
 ```
 python predict.py path_to_audio.wav
@@ -99,4 +119,14 @@ python train.py \
 --audio_sample_rate 22050 \
 --num_workers 24 \
 --max_epochs 100 \
+```
+
+## Cite
+If you use this code in your work please consider citing us.
+
+```
+@article{steinmetz2021wavebeat,
+    title={{WaveBeat}: End-to-end beat tracking with temporal convolutional networks},
+    author={Steinmetz, Christian J. and Reiss, Joshua D.},
+    year={2021}}
 ```
