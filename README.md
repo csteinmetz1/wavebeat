@@ -34,8 +34,8 @@ currently fails unless cython and numpy as installed first.
 ## Predicting beats
 
 We provide a simple interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
-To beging you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1q8RaF_ScLRiKgMpOYlY3YqNYT8xCL3TO/view?usp=sharing), 
-and place it in the [`checkpoints/`](checkpoints/) directory.
+To begin you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1q8RaF_ScLRiKgMpOYlY3YqNYT8xCL3TO/view?usp=sharing).
+Place it in the [`checkpoints/`](checkpoints/) directory, and extract the `.zip` file.
 Then run the model by providing a path to an audio file.
 
 ```
