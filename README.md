@@ -2,9 +2,9 @@
 
 # WaveBeat
 
-Beat tracking in the waveform domain with efficient TCNs.
+End-to-end beating tracking with temporal convolutional networks.
 
-[Paper](docs/end_to_end_beat_tracking_in_the_time_domain_with_temporal_convolutional_networks.pdf)
+| [Paper](docs/end_to_end_beat_tracking_with_temporal_convolutional_networks.pdf) |
 
 </div>
 
