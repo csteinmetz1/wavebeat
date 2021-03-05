@@ -164,11 +164,6 @@ class dsTCNModel(Base):
         for n in range(self.hparams.nblocks):
             rf += (self.hparams.kernel_size - 1) * \
                   (self.hparams.nblocks * self.hparams.stride)
-
-        #rf = self.hparams.kernel_size
-        #for n in range(1,self.hparams.nblocks):
-        #    dilation = self.hparams.dilation_growth ** (n % self.hparams.stack_size)
-        #    rf = rf + ((self.hparams.kernel_size-1) * dilation)
         return rf
 
     # add any model hyperparameters here

@@ -112,14 +112,6 @@ class Base(pl.LightningModule):
         # pass the input thrgouh the mode
         pred = self(input)
 
-        # apply lowpass filters
-        #pred_beats, _ = self.beat_filter(pred[...,0:1,:], target[...,0:1,:])
-        #pred_downbeats, _ = self.downbeat_filter(pred[...,1:2,:], target[...,1:2,:]) 
-
-        # combine back
-        #pred = torch.cat((pred_beats, pred_downbeats), dim=1)
-        #target = torch.cat((target_beats, target_downbeats), dim=1)
-
         # crop the input and target signals
         if self.hparams.causal:
             target = causal_crop(target, pred.shape[-1])
@@ -203,10 +195,6 @@ class Base(pl.LightningModule):
                                         replace=False,
                                         size=np.min([len(outputs["input"]), self.hparams.num_examples]))
 
-        #dbn = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-        #                                beats_per_bar=[3, 4], 
-        #                                fps=self.hparams.target_sample_rate)
-
         # compute metrics 
         songs = []
         beat_f1_scores = []
@@ -280,12 +268,6 @@ class Base(pl.LightningModule):
             self.logger.experiment.add_audio(f"input/{idx}",  
                                              i, self.global_step, 
                                              sample_rate=self.hparams.audio_sample_rate)
-            #self.logger.experiment.add_audio(f"target/{idx}", 
-            #                                 t, self.global_step, 
-            #                                 sample_rate=self.hparams.sample_rate)
-            #self.logger.experiment.add_audio(f"pred+target/{idx}",   
-            #                                 (p+t)/2, self.global_step, 
-            #                                 sample_rate=self.hparams.sample_rate)
 
             # log beats plots
             self.logger.experiment.add_image(f"act/{idx}",
