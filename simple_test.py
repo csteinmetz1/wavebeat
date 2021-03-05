@@ -74,7 +74,6 @@ model.to('cuda:0')
 model.eval()
 
 datasets = ["beatles", "ballroom", "hainsworth", "rwc_popular", "gtzan", "smc"]
-datasets = ["gtzan"]
 results = {} # storage for our result metrics
 
 # set the seed

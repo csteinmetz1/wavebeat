@@ -184,23 +184,22 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target_stop = int(audio_stop / self.target_factor)
             audio = audio[:,audio_start:audio_stop]
             target = target[:,target_start:target_stop]
-            #print(f"crop: {audio.shape} {target.shape}")
-        elif self.subset not in ['val', 'test', 'full-val']: # pad the audio and target is shorter than desired
+
+        # pad the audio and target is shorter than desired
+        if N_audio < self.length and self.subset not in ['val', 'test', 'full-val']: 
             pad_size = self.length - N_audio
-            #print(f"audio pad: {pad_size}")
             padl = pad_size - (pad_size // 2)
             padr = pad_size // 2
             audio = torch.nn.functional.pad(audio, 
                                             (padl, padr), 
                                             mode=self.pad_mode)
+        if N_target < self.target_length and self.subset not in ['val', 'test', 'full-val']: 
             pad_size = self.target_length - N_target
-            #print(f"target pad: {pad_size}")
             padl = pad_size - (pad_size // 2)
             padr = pad_size // 2
             target = torch.nn.functional.pad(target, 
                                              (padl, padr), 
                                              mode=self.pad_mode)
-            #print(f"crop: {audio.shape} {target.shape}")
             
         if self.subset in ["train", "full-train"]:
             return audio, target
@@ -348,7 +347,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target[:,start:stop] = 0
 
         # apply time stretching
-        if np.random.rand() < 0.0:
+        if np.random.rand() < 0.3:
             factor = np.random.normal(1.0, 0.5)  
             factor = np.clip(factor, a_min=0.6, a_max=1.8)
 
@@ -389,7 +388,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target = torch.roll(target, shift * direction)
 
         # shift targets forward/back max 70ms
-        if np.random.rand() < 0.8:      
+        if np.random.rand() < 0.3:      
             
             # in this method we shift each beat and downbeat by a random amount
             max_shift = int(0.070 * self.target_sample_rate)
