@@ -9,7 +9,7 @@ from wavebeat.dstcn import dsTCNModel
 
 parser = ArgumentParser()
 parser.add_argument('input', type=str)
-parser.add_argument('--model', type=str, default="models/")
+parser.add_argument('--model', type=str, default="checkpoints/")
 
 args = parser.parse_args()
 
