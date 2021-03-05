@@ -1,5 +1,6 @@
 import os
 import torch
+import julius
 import madmom
 import mir_eval
 import torchaudio
@@ -40,8 +41,69 @@ class Base(pl.LightningModule):
         self.gmse = GlobalMSELoss()
         self.gbce = GlobalBCELoss()
 
-    def forward(self, x, p):
+    def forward(self, x):
         pass
+
+    @torch.jit.unused  
+    def predict_beats(self, filename, use_gpu=False):
+        """ Load and audio file and predict the beat and downbeat loctions. 
+        
+        Args:
+            filename (str): Path to an audio file. 
+            use_gpu (bool, optional): Perform inference on GPU is available. 
+        
+        Returns:
+            beats (ndarray): Location of predicted beats in seconds.
+            downbeats (ndarray): Location of predicted downbeats in seconds.
+        """
+        
+        # load the audio into tensor
+        audio, sr = torchaudio.load(filename)
+
+        # resample to 22.05 kHz if needed
+        if sr != self.hparams.audio_sample_rate:
+            audio = julius.resample_frac(audio, sr, self.hparams.audio_sample_rate)   
+
+        if audio.shape[0] > 1:
+            print("Loaded multichannel audio. Summing to mono...")
+            audio = audio.mean(dim=0, keepdim=True)
+
+        # normalize the audio
+        audio /= audio.abs().max()
+
+        # add a batch dim
+        audio = audio.unsqueeze(0)
+
+        if use_gpu:
+            audio = audio.to("cuda:0")
+            self.to("cuda:0")
+        else:
+            self.to('cpu')
+
+        # pass audio to model
+        with torch.no_grad():
+            pred = torch.sigmoid(self(audio))
+
+        # move data back to CPU
+        if use_gpu:
+            pred = pred.cpu()
+
+        # separate the beats and downbeat activations
+        p_beats = pred[0,0,:]
+        p_downbeats = pred[0,1,:]
+
+        # use peak picking to find locations of beats and downbeats
+        _, beats, _ = find_beats(p_beats.numpy(), 
+                                    p_beats.numpy(), 
+                                    beat_type="beat",
+                                    sample_rate=self.hparams.target_sample_rate)
+
+        _, downbeats, _ = find_beats(p_downbeats.numpy(), 
+                                        p_downbeats.numpy(), 
+                                        beat_type="downbeat",
+                                        sample_rate=self.hparams.target_sample_rate)
+
+        return beats, downbeats
 
     @torch.jit.unused   
     def training_step(self, batch, batch_idx):

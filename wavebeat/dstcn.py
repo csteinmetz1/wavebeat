@@ -133,7 +133,6 @@ class dsTCNModel(Base):
             in_ch = ninputs if n == 0 else out_ch 
             out_ch = channel_width if n == 0 else in_ch + channel_growth
             dilation = dilation_growth ** (n % stack_size)
-            print(in_ch, out_ch)
 
             self.blocks.append(dsTCNBlock(
                 in_ch, 
