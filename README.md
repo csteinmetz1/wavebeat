@@ -14,6 +14,11 @@ End-to-end beating tracking with temporal convolutional networks.
 
 ## Setup
 
+First clone the repo.
+```
+git clone https://github.com/csteinmetz1/wavebeat.git
+```
+
 Setup a virtual environment and activate it.
 ```
 python3 -m venv env/
