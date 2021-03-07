@@ -19,13 +19,13 @@ Setup a virtual environment and activate it.
 python3 -m venv env/
 source env/bin/activate
 ```
-Next install numpy and cython first, manually.
+Next install numpy, cython, and aiohttp first, manually.
 ```
 pip install numpy cython aiohttp
 ```
-Then install the packages.
+Then install the `wavebeat` module.
 ```
-pip install -r requirements.txt
+python setup.py install
 ```
 
 This will ensure that `madmom` installs properly, as it 
@@ -38,14 +38,7 @@ Place it in the [`checkpoints/`](checkpoints/) directory, and extract the `.zip`
 
 ### Functional interface
 
-If you would like to use the functional interface, you can then install `wavebeat` as a package. 
-```
-python setup.py install
-```
-
-Note that as above, you will have to install `cython`, `numpy`, and `aiohttp` first, otherwise `madmom` install will fail. 
-
-Now you can create a script and import `wavebeat` as follows.
+If you would like to use the functional interface you can create a script and import `wavebeat` as follows.
 
 ```python
 from wavebeat.tracker import beatTracker
@@ -63,6 +56,12 @@ python predict.py path_to_audio.wav
 ```
 
 ## Evaluation
+
+In order to run the training and evaluation code you will additionally need
+to install all of the development requirements. 
+```
+pip install -r requirements.txt
+```
 
 To recreate our reported results you will first need to have access to the datasets. 
 See the paper for details on where to find them. 
