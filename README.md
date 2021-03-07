@@ -20,6 +20,7 @@ git clone https://github.com/csteinmetz1/wavebeat.git
 ```
 
 Setup a virtual environment and activate it.
+This requires that you use Python 3.8.
 ```
 python3 -m venv env/
 source env/bin/activate

@@ -7,8 +7,6 @@ from argparse import ArgumentParser
 
 from wavebeat.dstcn import dsTCNModel
 
-from wavebeat import beatTracker
-
 parser = ArgumentParser()
 parser.add_argument('input', type=str)
 parser.add_argument('--model', type=str, default="checkpoints/")
