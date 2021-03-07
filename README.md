@@ -39,7 +39,7 @@ currently fails unless cython, numpy, and aiohttp as installed first.
 
 ## Predicting beats
 
-To begin you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1q8RaF_ScLRiKgMpOYlY3YqNYT8xCL3TO/view?usp=sharing).
+To begin you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1qLtydQGu7fksSKhBN5Cz6cxnEzqlhd3u/view?usp=sharing).
 Place it in the [`checkpoints/`](checkpoints/) directory, and extract the `.zip` file.
 
 ### Functional interface
