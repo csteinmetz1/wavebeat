@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 
 from wavebeat.plot import plot_activations, make_table, plot_histogram
-from wavebeat.loss import GlobalMSELoss, GlobalBCELoss
+from wavebeat.loss import GlobalMSELoss, GlobalBCELoss, BCFELoss
 from wavebeat.utils import center_crop, causal_crop
 from wavebeat.eval import evaluate, find_beats
 from wavebeat.filter import FIRFilter
@@ -39,6 +39,7 @@ class Base(pl.LightningModule):
         self.bce = torch.nn.BCELoss()
         self.gmse = GlobalMSELoss()
         self.gbce = GlobalBCELoss()
+        self.bcfe = BCFELoss()
 
     def forward(self, x):
         pass
@@ -118,7 +119,8 @@ class Base(pl.LightningModule):
             target = center_crop(target, pred.shape[-1])
 
         # compute the error using appropriate loss      
-        loss, _, _ = self.gbce(pred, target)
+        #loss, _, _ = self.gbce(pred, target)
+        loss, _, _ = self.bcfe(pred, target)
 
         self.log('train_loss', 
                  loss, 
@@ -138,23 +140,22 @@ class Base(pl.LightningModule):
 
         # crop the input and target signals
         if self.hparams.causal:
-            input_crop = causal_crop(input, pred.shape[-1])
             target_crop = causal_crop(target, pred.shape[-1])
         else:
-            input_crop = center_crop(input, pred.shape[-1])
             target_crop = center_crop(target, pred.shape[-1])
 
         # compute the validation error using all losses
-        gmse_loss, _, _ = self.gbce(pred, target_crop)
+        #loss, _, _ = self.gbce(pred, target_crop)
+        loss, _, _ = self.bcfe(pred, target_crop)
 
-        self.log('val_loss', gmse_loss)
+        self.log('val_loss', loss)
 
         # apply sigmoid after computing loss
         pred = torch.sigmoid(pred)
 
         # move tensors to cpu for logging
         outputs = {
-            "input" : input_crop.cpu(),
+            "input" : input.cpu(),
             "target": target_crop.cpu(),
             "pred"  : pred.cpu(),
             "Filename" : metadata['Filename'],
@@ -313,10 +314,14 @@ class Base(pl.LightningModule):
     @torch.jit.unused
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
-                                                                  patience=self.hparams.patience, 
-                                                                  verbose=True,
-                                                                  mode='max')
+        #lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+        #                                                          patience=self.hparams.patience, 
+        #                                                          verbose=True,
+        #                                                          mode='max')
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 
+                                                       step_size=10, 
+                                                       gamma=0.5,
+                                                       verbose=True)                                                      
         return {
             'optimizer': optimizer,
             'lr_scheduler': lr_scheduler,

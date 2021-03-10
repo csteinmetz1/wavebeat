@@ -347,7 +347,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
             target[:,start:stop] = 0
 
         # apply time stretching
-        if np.random.rand() < 0.3:
+        if np.random.rand() < 0.0:
             factor = np.random.normal(1.0, 0.5)  
             factor = np.clip(factor, a_min=0.6, a_max=1.8)
 
@@ -391,7 +391,7 @@ class DownbeatDataset(torch.utils.data.Dataset):
         if np.random.rand() < 0.3:      
             
             # in this method we shift each beat and downbeat by a random amount
-            max_shift = int(0.070 * self.target_sample_rate)
+            max_shift = int(0.045 * self.target_sample_rate)
 
             beat_ind = torch.logical_and(target[0,:] == 1, target[1,:] != 1).nonzero(as_tuple=False) # all beats EXCEPT downbeats
             dbeat_ind = (target[1,:] == 1).nonzero(as_tuple=False)
