@@ -2,14 +2,14 @@
 
 # WaveBeat
 
-End-to-end beating tracking with temporal convolutional networks.
+End-to-end beat and downbeat tracking in the time domain.
 
-| [Paper](docs/end_to_end_beat_tracking_with_temporal_convolutional_networks.pdf) |
+| [Paper](docs/resources/AES_151___WaveBeat__End_to_end_beat_and_downbeat_tracking_in_the_time_domain.pdf) | [Website]() | [Video]() |
 
 </div>
 
 <div align="center">
-<img src="docs/block.svg">
+<img src="docs/resources/block.svg">
 </div>
 
 ## Setup
@@ -54,7 +54,7 @@ beat, downbeats = beatTracker('audio.wav')
 
 ### Script interface
 
-We provide a simple scipt interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
+We provide a simple script interface to load an audio file and predict the beat and downbeat locations with a pre-trained model. 
 Run the model by providing a path to an audio file.
 
 ```
@@ -130,8 +130,9 @@ python train.py \
 If you use this code in your work please consider citing us.
 
 ```
-@article{steinmetz2021wavebeat,
-    title={{WaveBeat}: End-to-end beat tracking with temporal convolutional networks},
+@inproceedings{steinmetz2021wavebeat,
+    title={{WaveBeat}: End-to-end beat and downbeat tracking in the time domain},
     author={Steinmetz, Christian J. and Reiss, Joshua D.},
+    booktitle={151st AES Convention},
     year={2021}}
 ```

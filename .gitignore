@@ -132,3 +132,4 @@ lightning_logs/
 .vscode/
 *.ckpt
 *.zip
+.DS_Store
