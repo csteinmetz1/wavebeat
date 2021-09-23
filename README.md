@@ -4,7 +4,7 @@
 
 End-to-end beat and downbeat tracking in the time domain.
 
-| [Paper](docs/resources/AES_151___WaveBeat__End_to_end_beat_and_downbeat_tracking_in_the_time_domain.pdf) | [Website]() | [Video]() |
+| [Paper](docs/resources/AES_151___WaveBeat__End_to_end_beat_and_downbeat_tracking_in_the_time_domain.pdf) | [Code](https://github.com/csteinmetz1/wavebeat) | [Video](https://youtu.be/rHSvRQOlric) |
 
 </div>
 
@@ -17,6 +17,7 @@ End-to-end beat and downbeat tracking in the time domain.
 First clone the repo.
 ```
 git clone https://github.com/csteinmetz1/wavebeat.git
+cd wavebeat
 ```
 
 Setup a virtual environment and activate it.
@@ -35,12 +36,18 @@ python setup.py install
 ```
 
 This will ensure that `madmom` installs properly, as it 
-currently fails unless cython, numpy, and aiohttp as installed first. 
+currently fails unless cython, numpy, and aiohttp are installed first. 
 
 ## Predicting beats
 
-To begin you will first need to download the pre-trained model [here](https://drive.google.com/file/d/1qLtydQGu7fksSKhBN5Cz6cxnEzqlhd3u/view?usp=sharing).
-Place it in the [`checkpoints/`](checkpoints/) directory, and extract the `.zip` file.
+To begin you will first need to download the pre-trained model [here](https://zenodo.org/record/5525120).
+Place it in the [`checkpoints/`](checkpoints/) directory, rename to get the `.ckpt` file.
+
+```
+cd checkpoints
+wget https://zenodo.org/record/5525120/files/wavebeat_epoch%3D98-step%3D24749.ckpt?download=1
+mv wavebeat_epoch=98-step=24749.ckpt?download=1 wavebeat_epoch=98-step=24749.ckpt
+```
 
 ### Functional interface
 
