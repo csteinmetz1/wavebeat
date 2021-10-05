@@ -4,7 +4,7 @@
 
 End-to-end beat and downbeat tracking in the time domain.
 
-| [Paper](https://csteinmetz1.github.io/wavebeat/resources/AES_151___WaveBeat__End_to_end_beat_and_downbeat_tracking_in_the_time_domain.pdf) | [Code](https://github.com/csteinmetz1/wavebeat) | [Video](https://youtu.be/rHSvRQOlric) | [Slides](https://csteinmetz1.github.io/wavebeat/resources/AES_151__WaveBeat_slides.pdf) |
+| [Paper](https://arxiv.org/abs/2110.01436) | [Code](https://github.com/csteinmetz1/wavebeat) | [Video](https://youtu.be/rHSvRQOlric) | [Slides](https://csteinmetz1.github.io/wavebeat/resources/AES_151__WaveBeat_slides.pdf) |
 
 </div>
 
