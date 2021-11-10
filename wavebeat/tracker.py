@@ -35,6 +35,6 @@ def beatTracker(inputFile, ckpt_dir='checkpoints/', use_gpu=False):
     model.eval()
 
     # get the locations of the beats and downbeats
-    beats, downbeats = model.predict_beats(inputFile)
+    beats, downbeats = model.predict_beats(inputFile, use_gpu=use_gpu)
 
     return beats, downbeats
